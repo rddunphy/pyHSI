@@ -64,7 +64,9 @@ class Scanner:
         self._write(b'MA {0}'.format(target_steps))
         self.wait_while_moving(s)
 
-    def scan(self, start, end, velocity):
+    def scan(self, start, end, velocity=None):
+        if not velocity:
+            velocity = self.default_velocity
         self.set_velocity(self.default_velocity)
         self.move_to(start)
         self.set_velocity(velocity)
