@@ -3,28 +3,37 @@ import numpy as np
 from pypylon import genicam, pylon
 from spectral.io import envi
 
+from hsi import highlight_saturated
 from zolix import Scanner, auto_detect_port
 
 
-def preview(exp=None, gain=None, binning=None, velocity=None, port=None):
+def get_camera(exp=None, gain=None, binning=None):
+    device = pylon.TlFactory.GetInstance().CreateFirstDevice()
+    camera = pylon.InstantCamera(device)
+    camera.Open()
+    if exp:
+        camera.ExposureTime = exp  # Exposure time in microseconds, as double
+    if gain:
+        camera.Gain = gain  # Gain in dB as double
+    if binning:
+        camera.BinningHorizontalMode = "BinningHorizontalMode_Sum"  # Not available for every model?
+        camera.BinningVerticalMode = "BinningVerticalMode_Sum"
+        camera.BinningHorizontal = binning
+        camera.BinningVertical = binning
+    return camera
+
+
+def preview(highlight=True, exp=None, gain=None, binning=None):
     try:
-        device = pylon.TlFactory.GetInstance().CreateFirstDevice()
-        camera = pylon.InstantCamera(device)
-        camera.Open()
-        if exp:
-            camera.ExposureTime = exp  # Exposure time in microseconds, as double
-        if gain:
-            camera.Gain = gain  # Gain in dB as double
-        if binning:
-            camera.BinningHorizontalMode = "BinningHorizontalMode_Sum"  # Not available for every model?
-            camera.BinningVerticalMode = "BinningVerticalMode_Sum"
-            camera.BinningHorizontal = binning
-            camera.BinningVertical = binning
+        camera = get_camera(exp=exp, gain=gain, binning=binning)
         camera.StartGrabbing()
         while True:
             grab = camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
             if grab.GrabSucceeded():
-                cv2.imshow(grab.Array)
+                img = grab.Array
+                if highlight:
+                    img = highlight_saturated(img)
+                cv2.imshow("Preview", img)
             grab.Release()
     finally:
         camera.StopGrabbing()
@@ -50,18 +59,7 @@ def capture_save(file_name, start, stop, exp=None, gain=None, binning=None, velo
         file_name = file_name + '.hdr'
     frames = []
     try:
-        device = pylon.TlFactory.GetInstance().CreateFirstDevice()
-        camera = pylon.InstantCamera(device)
-        camera.Open()
-        if exp:
-            camera.ExposureTime = exp  # Exposure time in microseconds, as double
-        if gain:
-            camera.Gain = gain  # Gain in dB as double
-        if binning:
-            camera.BinningHorizontalMode = "BinningHorizontalMode_Sum"  # Not available for every model?
-            camera.BinningVerticalMode = "BinningVerticalMode_Sum"
-            camera.BinningHorizontal = binning
-            camera.BinningVertical = binning
+        camera = get_camera(exp=exp, gain=gain, binning=binning)
         n_frames = 0
         s.move_to(start, block=True)
         s.move_to(stop, velocity=velocity)
@@ -93,8 +91,7 @@ def capture_save(file_name, start, stop, exp=None, gain=None, binning=None, velo
 
 def connection_test():
     try:
-        device = pylon.TlFactory.GetInstance().CreateFirstDevice()
-        camera = pylon.InstantCamera(device)
+        camera = get_camera()
         camera.Open()
         print("Connected to device: ", camera.GetDeviceInfo().GetModelName())
         camera.Close()
