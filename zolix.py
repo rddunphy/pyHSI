@@ -33,16 +33,13 @@ class Scanner:
     def _read(self):
         return self.ser.read_until(self.read_terminator).strip()
 
+    def is_moving(self):
+        self._write(b'PR MV')
+        return int(self._read())
+
     def wait_while_moving(self):
-        while True:
-            self._write(b'PR MV')
-            try:
-                mv = int(self._read())
-                if mv == 0:
-                    return
-            except ValueError:
-                # Response wasn't an integer
-                pass
+        while self.is_moving():
+            continue
 
     def reset(self):
         self._write(b'S4=1,1,1')
@@ -56,23 +53,19 @@ class Scanner:
                               f"{self.max_velocity} mm/s"))
         velocity_steps = round(velocity * self.mm_to_steps)
         self._write(b'VM {0}'.format(velocity_steps))
+        self._v = velocity
 
-    def move_to(self, target):
+    def move_to(self, target, velocity=None, block=False):
+        if velocity:
+            self.set_velocity(velocity)
         if target < 0 or target > self.length:
             raise ValueError(f"Target must be between 0 and {self.length} mm")
         target_steps = round(target * self.mm_to_steps)
         self._write(b'MA {0}'.format(target_steps))
-        self.wait_while_moving(s)
-
-    def scan(self, start, end, velocity=None):
-        if not velocity:
-            velocity = self.default_velocity
-        self.set_velocity(self.default_velocity)
-        self.move_to(start)
-        self.set_velocity(velocity)
-        self.move_to(end)
-        self.set_velocity(self.default_velocity)
-        self.move_to(start)
+        if self._v != self.default_velocity:
+            self.set_velocity(self.default_velocity)
+        if block:
+            self.wait_while_moving()
 
 
 def auto_detect_port():
