@@ -41,9 +41,27 @@ def preview(highlight=True, exp=None, gain=None, binning=None):
         cv2.destroyAllWindows()
 
 
-def preview_waterfall():
+def preview_waterfall(exp=None, gain=None, binning=None):
     # TODO: Waterfall preview for focus
-    pass
+    length = 200
+    preview = []
+    try:
+        camera = get_camera(exp=exp, gain=gain, binning=binning)
+        camera.StartGrabbing()
+        while True:
+            grab = camera.RetrieveResult(5000, pylon.TimeoutHandling_ThrowException)
+            if grab.GrabSucceeded():
+                img = grab.Array
+                idx = img.size[1] // 2  # TODO: correct dimension?
+                preview.append(img[idx])
+                if len(preview) > length:
+                    preview = preview[len(preview) - length:]
+                cv2.imshow("Waterfall preview", preview)
+            grab.Release()
+    finally:
+        camera.StopGrabbing()
+        camera.Close()
+        cv2.destroyAllWindows()
 
 
 def capture_save(file_name, start, stop, exp=None, gain=None, binning=None, velocity=None, port=None):

@@ -14,3 +14,14 @@ Pylon is the API for working with Basler cameras. Set-up requires:
 ## Zolix
 
 `zolix.py` contains code for operating the Zolix translation stage. This consists mainly of the `Scanner` class, which has methods such as `move_to()`. When first getting set up, run `Scanner.reset()`.
+
+## HSI
+
+`hsi.py` includes some tools for displaying and working with HSI files.
+
+## `basler_cam.py`
+
+Functions include:
+
+* `preview()`
+* `preview_waterfall()`
