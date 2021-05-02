@@ -1,5 +1,0 @@
-spectral
-matplotlib
-pypylon
-opencv-python
-numpy
