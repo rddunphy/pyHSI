@@ -1,0 +1,7 @@
+matplotlib==3.3.2
+numpy==1.19.4
+opencv-python==4.4.0.46
+Pillow==8.0.1
+pypylon==1.7.2
+pytest==6.2.4
+spectral==0.22.1
