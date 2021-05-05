@@ -11,10 +11,11 @@ setup(
     license='MIT',
     packages=['pyhsi'],
     install_requires=[
+        'numpy>=1.19',
+        'opencv-python>=4.4',
         'pip>=20.3',
-        'opencv-python',
-        'numpy',
-        'pypylon',
-        'spectral'
+        'pypylon>=1.7',
+        'pyserial>=6.2',
+        'spectral>=0.22'
     ]
 )
