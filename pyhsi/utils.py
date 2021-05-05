@@ -29,6 +29,24 @@ def nearest_band(wavelengths, target):
     return idx
 
 
+def get_rgb_bands(wavelengths):
+    """Get nearest bands to actual red, green, and blue light.
+
+    If any two bands are the same (i.e. the spectrum of the camera does not
+    cover the full visible spectrum), returns three evenly spaced bands for
+    pseudo-RGB colouring.
+    """
+    bands = (
+        nearest_band(wavelengths, 630),
+        nearest_band(wavelengths, 532),
+        nearest_band(wavelengths, 465)
+    )
+    if bands[0] == bands[1] or bands[1] == bands[2]:
+        inc = len(wavelengths) // 4
+        bands = (3 * inc, 2 * inc, inc)
+    return bands
+
+
 def highlight_saturated(img, threshold_black=0, threshold_white=1):
     """Highlight saturated pixels in a greyscale image.
 

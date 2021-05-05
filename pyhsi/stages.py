@@ -22,22 +22,23 @@ class TSA200:
     """Represents an instance of the Zolix TSA200 linear stage."""
 
     def __init__(self, velocity=20, length=196, max_velocity=40,
-                 com_port=None, device_name="USB2Serial 1xRS422/485"):
+                 port=None, device_name="USB2Serial 1xRS422/485"):
         """Connects to the stage and resets it.
 
         Kwargs:
             velocity: the default velocity in mm/s.
             length: the traversable length of the stage in mm. [Default 196]
             max_velocity: the maximum allowed velocity.
-            com_port: the name of the COM port to connect to (e.g. `COM3` on
-                Windows, `/dev/ttyUSB0` on Linux. If not specified, the port
-                will be detected automatically.
+            port: the serial port on which the stage is connected. If not
+                specified, the port will be detected automatically.
             device_name: device name to look up if com_port is not specified.
                 This is likely to be the serial adapter, rather than the stage
                 itself.
         """
-        if not com_port:
-            com_port = self._auto_detect_port(device_name)
+        if port:
+            self._serial = port
+        else:
+            self._serial = self._auto_detect_port(device_name)
         self.length = length
         self.max_velocity = max_velocity
         self.default_velocity = velocity
@@ -46,19 +47,18 @@ class TSA200:
         self._write_terminator = serial.CR
         self._read_terminator = serial.LF
         try:
-            self._serial = serial.Serial(com_port)
             if not self._serial.is_open:
                 self._serial.open()
             self.reset()
         except SerialException as e:
             if e.errno == 13:
-                raise IOError((f"Can't open port '{com_port}' - on Linux, "
-                               "add user to dialup group (`sudo usermod -a "
-                               "-G dialout USER_NAME`)")) from e
+                m = ("Can't open serial port - on Linux, add user to dialout "
+                     "group (`sudo usermod -a -G dialout USER_NAME`)")
+                raise SerialException(m) from e
             raise
 
     def _auto_detect_port(self, product):
-        """Scan for active com ports that match the device.
+        """Scan for active serial ports that match the device.
 
         Args:
             product: name of product against which to match the port.
@@ -66,9 +66,8 @@ class TSA200:
         ports = list_ports.comports()
         for port in ports:
             if port.product == product:
-                self.com_port = port.device
-                return
-        raise IOError(f"No port with device '{product}' connected.")
+                return serial.Serial(port.device)
+        raise SerialException(f"No port with device '{product}' connected.")
 
     def _write(self, cmd):
         # Write command terminated with CR

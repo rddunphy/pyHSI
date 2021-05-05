@@ -16,14 +16,14 @@ from pypylon import pylon
 from spectral.io import envi
 
 from .stages import TSA200
-from .utils import highlight_saturated, get_wavelengths, nearest_band
+from .utils import highlight_saturated, get_wavelengths, get_rgb_bands
 
 
 class BaslerCamera:
     """Represents an instance of the Basler piA1600 camera."""
 
     def __init__(self, exp=4000, gain=100, binning=1, mode_12bit=True,
-                 stage=None):
+                 stage=None, device=None):
         """Get an instance of the Basler camera with the specified setup.
 
         Kwargs:
@@ -31,11 +31,16 @@ class BaslerCamera:
             gain: raw gain value (range 0-500)
             binning: vertical and horizontal pixel binning
             mode_12bit: use 12-bit mode (8-bit mode if False)
-            stage: linear translation stage for capturing images
-                (creates instance of TSA200 if not specified)
+            stage: linear translation stage for capturing images (creates
+                instance of TSA200 if not specified)
+            device: instance of pylon camera (generated automatically by
+                default)
         """
-        device = pylon.TlFactory.GetInstance().CreateFirstDevice()
-        self.device = pylon.InstantCamera(device)
+        if device:
+            self.device = device
+        else:
+            device = pylon.TlFactory.GetInstance().CreateFirstDevice()
+            self.device = pylon.InstantCamera(device)
         self.min_wl = 278.7
         self.max_wl = 1003.5
         self.raw_gain_factor = 0.0359
@@ -95,23 +100,6 @@ class BaslerCamera:
         """Get gain in dB"""
         return self.raw_gain_factor * self.raw_gain
 
-    def get_rgb_bands(self):
-        """Get nearest bands to actual red, green, and blue light.
-
-        If any two bands are the same (i.e. the spectrum of the camera does not
-        cover the full visible spectrum), returns three evenly spaced bands for
-        pseudo-RGB colouring.
-        """
-        bands = (
-            nearest_band(self.wl, 630),
-            nearest_band(self.wl, 532),
-            nearest_band(self.wl, 465)
-        )
-        if bands[0] == bands[1] or bands[1] == bands[2]:
-            inc = self.n_bands // 4
-            bands = (3 * inc, 2 * inc, inc)
-        return bands
-
     def preview(self, highlight=True, flip=False, scale_to=None):
         """Show a live preview of frames from the camera.
 
@@ -155,7 +143,7 @@ class BaslerCamera:
 
         Useful for checking focus. Output will be in greyscale if a single band
         is selected, or in RGB if three bands are selected. If bands are not
-        specified, output will use result of `get_rgb_bands()`.
+        specified, output will use result of `pyhsi.utils.get_rgb_bands()`.
 
         Kwargs:
             bands: which band(s) to use in the preview
@@ -165,7 +153,7 @@ class BaslerCamera:
             scale_to: size to scale output to - (width, height)
         """
         if bands is None:
-            bands = self.get_rgb_bands()
+            bands = get_rgb_bands(self.wl)
         if len(bands) == 1:
             greyscale = True
             print(f"Using band {bands}")
