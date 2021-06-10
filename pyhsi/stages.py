@@ -121,7 +121,7 @@ class TSA200:
                               f"{self.max_velocity} mm/s"))
         velocity_steps = round(velocity * self._mm_to_steps)
         self._write(b'VM %d' % velocity_steps)  # Velocity Maximum
-        self._write(b'VI %d' % velocity_steps)  # Velocity Initial
+        self._write(b'VI %d' % round(velocity_steps/4))  # Velocity Initial
         self._v = velocity
 
     def move_to(self, target, velocity=None, block=False):

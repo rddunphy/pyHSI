@@ -1,6 +1,7 @@
 """Utility tools for viewing and working with hyperspectral images."""
 
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 
 
@@ -66,6 +67,41 @@ def highlight_saturated(img, threshold_black=0, threshold_white=1):
     return img
 
 
+def add_wavelength_labels(img, wl, rot=0):
+    w0 = min(wl)
+    w1 = max(wl)
+    margin = 20
+    step = 100
+    vals = [v for v in range(0, round(w1), step) if v > w0]
+    for v in vals:
+        if rot == 1:
+            pos = round(img.shape[0] * (1 - (v - w0) / (w1 - w0)))
+        elif rot == 2:
+            pos = round(img.shape[1] * (1 - (v - w0) / (w1 - w0)))
+        elif rot == 3:
+            pos = round(img.shape[0] * (v - w0) / (w1 - w0))
+        elif rot == 0:
+            pos = round(img.shape[1] * (v - w0) / (w1 - w0))
+        if rot % 2:
+            p1 = (10, pos)
+            p2 = (30, pos)
+            org = (40, pos + 10)
+            text = f"{v} nm"
+        else:
+            p1 = (pos, 10)
+            p2 = (pos, 30)
+            org = (pos - 30, 60)
+            text = str(v)
+        font = cv2.FONT_HERSHEY_SIMPLEX
+        scale = 1
+        colour = (0, 255, 0)
+        thickness = 2
+        img = cv2.line(img, p1, p2, colour, thickness)
+        if v > w0 + margin and v < w1 - margin:
+            img = cv2.putText(img, text, org, font, scale, colour, thickness)
+    return img
+
+
 def image_play(img, highlight=False, title="Preview"):
     """Display video preview of image, exit with ESC.
 
@@ -88,3 +124,14 @@ def image_play(img, highlight=False, title="Preview"):
                 raise KeyboardInterrupt("User pressed escape")
     finally:
         cv2.destroyAllWindows()
+
+
+def show_band(img, band):
+    plt.imshow(img[:, :, band].squeeze(), cmap="Greys")
+    plt.show()
+
+
+def show_preview(img, wl):
+    rgb = img[:, :, get_rgb_bands(wl)]
+    plt.imshow(rgb)
+    plt.show()
