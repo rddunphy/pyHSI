@@ -3,8 +3,6 @@ import os
 import sys
 
 import cv2
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 import PySimpleGUI as sg
 import serial
@@ -148,7 +146,6 @@ class PyHSI:
             resizable=True,
             finalize=True
         )
-        self.window.tk.call('tk', 'scaling', 1.0)
         for e in self.xy_expand_elements:
             e.expand(expand_x=True, expand_y=True)
         for e in self.x_expand_elements:
@@ -292,7 +289,6 @@ class PyHSI:
                         sg.Text("--", size=(15, 1), key=PREVIEW_BLUE_BAND_NM)
                     ]
                 ], key=PREVIEW_RGB_BAND_PANE, pad=(0, 0), visible=False))
-                # TODO: Display actual wavelengths
             ],
             [
                 sg.Checkbox("Highlight saturated", size=(16, 1), key=PREVIEW_HIGHLIGHT_CB),
@@ -589,15 +585,6 @@ class PyHSI:
         if None in values.values():
             raise ValueError("Invalid input(s)")
         return values
-
-    def show_preview(self, img, wl):
-        fig = plt.figure()
-        rgb = img[:, :, get_rgb_bands(wl)]
-        fig.add_subplot(111).imshow(rgb)
-        figure_canvas_agg = FigureCanvasTkAgg(
-            fig, self.window[PREVIEW_CANVAS].TKCanvas)
-        figure_canvas_agg.draw()
-        figure_canvas_agg.get_tk_widget().pack(side="top", fill="both", expand=1)
 
     def start_live_preview(self, values):
         self.log("Starting live preview", level=DEBUG)
