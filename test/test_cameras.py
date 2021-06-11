@@ -22,6 +22,7 @@ class TestBaslerCamera(unittest.TestCase):
     def setUp(self):
         self.mock_device = MagicMock()
         self.mock_stage = MagicMock()
+        self.mock_stage.default_velocity = 20
         self.cam = BaslerCamera(device=self.mock_device)
 
     def test_capture(self):
