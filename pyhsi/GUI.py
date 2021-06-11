@@ -138,6 +138,7 @@ class PyHSI:
         self.window = sg.Window(
             title="PyHSI",
             layout=[[menubar], [content], [console]],
+            enable_close_attempted_event=True,
             resizable=True,
             finalize=True
         )
@@ -154,16 +155,11 @@ class PyHSI:
             ts = datetime.now().strftime("%H:%M:%S")
             ls = ["DEBUG", "INFO", "WARN", "ERROR"][level]
             entry = f"[{ts}] {ls}: {message}"
-            try:
-                if self.window[CONSOLE_OUTPUT].get().strip():
-                    cpentry = '\n' + entry
-                else:
-                    cpentry = entry
-                sg.cprint(cpentry, text_color=LOG_COLOURS[level], end='')
-            except tk.TclError:
-                # Console element has been destroyed (e.g. because window has
-                # been closed), but we can still print to stdout for debugging
-                pass
+            if self.window[CONSOLE_OUTPUT].get().strip():
+                cpentry = '\n' + entry
+            else:
+                cpentry = entry
+            sg.cprint(cpentry, text_color=LOG_COLOURS[level], end='')
             if self.debug:
                 print(entry)
 
@@ -487,11 +483,18 @@ class PyHSI:
                 self.window[STAGE_PORT_PANE].update(visible=False)
             else:
                 self.window[STAGE_PORT_PANE].update(visible=True)
+        elif event in (MENU_QUIT, sg.WINDOW_CLOSE_ATTEMPTED_EVENT):
+            self.exit()
 
     def exit(self):
         # TODO: Cleanup code / check there are no ongoing processes
         # We don't want to exit in the middle of capturing an image - in this
         # case probably display a prompt?
+        if self.live_preview_active:
+            confirm = sg.popup_ok_cancel("Are you sure you want to exit?", title="Confirm close")
+            if confirm != "OK":
+                return
+            self.stop_live_preview()
         self.log("Exiting PyHSI", level=DEBUG)
         self.window.close()
         sys.exit()
@@ -500,14 +503,11 @@ class PyHSI:
         _, values = self.window.read(timeout=0)
         event = INIT_EVENT
         while True:
-            if event in (MENU_QUIT, sg.WIN_CLOSED):
-                break
-            elif event != '__TIMEOUT__':
+            if event != '__TIMEOUT__':
                 self.handle_event(event, values)
             elif self.live_preview_active:
                 self.next_live_preview_frame(values)
             event, values = self.window.read(timeout=0)
-        self.exit()
 
     def setup_stage(self, values):
         try:
