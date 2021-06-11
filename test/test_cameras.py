@@ -22,7 +22,7 @@ class TestBaslerCamera(unittest.TestCase):
     def setUp(self):
         self.mock_device = MagicMock()
         self.mock_stage = MagicMock()
-        self.cam = BaslerCamera(stage=self.mock_stage, device=self.mock_device)
+        self.cam = BaslerCamera(device=self.mock_device)
 
     def test_capture(self):
         self.mock_device.RetrieveResult = MagicMock(side_effect=[
@@ -30,7 +30,7 @@ class TestBaslerCamera(unittest.TestCase):
             MockGrab([[9, 8], [31, 5]])
         ])
         self.mock_stage.is_moving = MagicMock(side_effect=[True, True, False])
-        data = self.cam.capture(0, 100)
+        data = self.cam.capture(self.mock_stage, [0, 100])
         target = np.array([[[12, 100], [0, 3]], [[8, 5], [9, 31]]])
         np.testing.assert_array_equal(data, target)
 

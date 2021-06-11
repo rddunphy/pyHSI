@@ -174,7 +174,7 @@ class TSA200:
         print(f"Move completed in {time_taken:.2f} seconds.")
 
 
-class DummyStage:
+class MockStage:
     """Simulates the behaviour of a Zolix TSA200 linear translation stage."""
 
     def __init__(self, com_port=None, velocity=20, length=196,

@@ -3,29 +3,25 @@
 Usage example:
 
     camera = BaslerCamera()
-    camera.waterfall()
-    camera.capture_save('file_name', 50, 150)
+    stage = TSA200()
+    camera.capture_save('file_name', stage, (50, 150))
 """
 
 from datetime import datetime
 import os
-import time
 import timeit
 
-import cv2
 import numpy as np
 from pypylon import pylon
 from spectral.io import envi
 
-from .stages import TSA200
-from .utils import highlight_saturated, get_wavelengths, get_rgb_bands
+from .utils import highlight_saturated, get_wavelengths
 
 
 class BaslerCamera:
     """Represents an instance of the Basler piA1600 camera."""
 
-    def __init__(self, exp=4000, gain=100, binning=1, mode_12bit=True,
-                 stage=None, device=None):
+    def __init__(self, exp=4000, gain=100, binning=1, mode_12bit=True, device=None):
         """Get an instance of the Basler camera with the specified setup.
 
         Kwargs:
@@ -33,10 +29,7 @@ class BaslerCamera:
             gain: raw gain value (range 0-500)
             binning: vertical and horizontal pixel binning
             mode_12bit: use 12-bit mode (8-bit mode if False)
-            stage: linear translation stage for capturing images (creates
-                instance of TSA200 if not specified)
-            device: instance of pylon camera (generated automatically by
-                default)
+            device: hardware device to use instead of Pylon instance
         """
         self.device = device
         self.min_wl = 278.7
@@ -48,17 +41,19 @@ class BaslerCamera:
         self.set_raw_gain(gain)
         self.set_binning(binning)
         self.set_mode_12bit(mode_12bit)
-        self.stage = stage
+        self.dirty = True
 
     def set_exposure_time(self, exp):
         """Set exposure time in in μs"""
         self.exp = exp
+        self.dirty = True
 
     def set_mode_12bit(self, mode_12bit):
         """Use 12-bit mode (8-bit mode if False)"""
         self.mode_12bit = mode_12bit
         self.bits = 12 if mode_12bit else 8
         self.ref_scale_factor = 4095 if mode_12bit else 255
+        self.dirty = True
 
     def set_binning(self, binning):
         """Set vertical and horizontal pixel binning. 1, 2, or 4."""
@@ -66,10 +61,12 @@ class BaslerCamera:
         self.n_bands = self.max_bands // binning
         self.n_samples = self.max_samples // binning
         self.wl = get_wavelengths(self.n_bands, self.min_wl, self.max_wl)
+        self.dirty = True
 
     def set_raw_gain(self, raw_gain):
         """Set raw gain value (range 0-500)"""
         self.raw_gain = raw_gain
+        self.dirty = True
 
     def set_actual_gain(self, gain):
         """Set gain in dB"""
@@ -80,191 +77,35 @@ class BaslerCamera:
         return self.raw_gain_factor * self.raw_gain
 
     def set_hardware_values(self):
-        if self.device is None:
-            device = pylon.TlFactory.GetInstance().CreateFirstDevice()
-            self.device = pylon.InstantCamera(device)
-        self.device.Open()
-        self.device.BinningHorizontal.SetValue(self.binning)
-        self.device.BinningVertical.SetValue(self.binning)
-        self.device.GainRaw.SetValue(self.raw_gain)
-        if self.mode_12bit:
-            self.device.PixelFormat.SetValue('Mono16')
-        else:
-            self.device.PixelFormat.SetValue('Mono8')
-        self.device.ExposureTimeAbs.SetValue(self.exp)
-        self.device.Close()
-
-    def preview(self, highlight=True, flip=False, scale_to=None):
-        """Show a live preview of frames from the camera.
-
-        Useful for checking exposure.
-
-        Kwargs:
-            highlight: highlight saturated pixels in blue/red (default True)
-            flip: flip order of columns in each frame
-            scale_to: size to scale output to - (width, height)
-        """
-        self.set_hardware_values()
-        try:
-            cv_window_title = "BaslerCamera preview"
-            cv2.namedWindow(cv_window_title)
-            cv2.startWindowThread()
-            self.device.StartGrabbing()
-            while True:
-                grab = self.device.RetrieveResult(
-                    5000, pylon.TimeoutHandling_ThrowException)
-                if grab.GrabSucceeded():
-                    img = np.asarray(grab.Array) / self.ref_scale_factor
-                    img = np.rot90(img, k=2)
-                    if flip:
-                        img = np.fliplr(img)
-                    if highlight:
-                        img = highlight_saturated(img)
-                    if scale_to:
-                        img = cv2.resize(img, scale_to)
-                    cv2.imshow(cv_window_title, img)
-                    k = cv2.waitKey(1) & 0xFF
-                    if k == 27 or cv2.getWindowProperty(cv_window_title, cv2.WND_PROP_VISIBLE) < 1:
-                        break
-                grab.Release()
-        finally:
-            self.device.StopGrabbing()
+        if self.dirty:
+            if self.device is None:
+                device = pylon.TlFactory.GetInstance().CreateFirstDevice()
+                self.device = pylon.InstantCamera(device)
+            self.device.Open()
+            self.device.BinningHorizontal.SetValue(self.binning)
+            self.device.BinningVertical.SetValue(self.binning)
+            self.device.GainRaw.SetValue(self.raw_gain)
+            if self.mode_12bit:
+                self.device.PixelFormat.SetValue('Mono16')
+            else:
+                self.device.PixelFormat.SetValue('Mono8')
+            self.device.ExposureTimeAbs.SetValue(self.exp)
             self.device.Close()
-            cv2.destroyAllWindows()
+            self.dirty = False
 
-    def waterfall(self, bands=None, length=500, flip=False, horizontal=False,
-                  scale_to=None):
-        """Show a live spatial preview of successive frames.
-
-        Useful for checking focus. Output will be in greyscale if a single band
-        is selected, or in RGB if three bands are selected. If bands are not
-        specified, output will use result of `pyhsi.utils.get_rgb_bands()`.
-
-        Kwargs:
-            bands: which band(s) to use in the preview
-            length: number of frames to show
-            flip: flip order of columns in each frame
-            horizontal: rotate so frames shift horizontally (right to left)
-            scale_to: size to scale output to - (width, height)
-        """
+    def get_frame(self, flip=False, highlight=False):
         self.set_hardware_values()
-        if bands is None:
-            bands = get_rgb_bands(self.wl)
-        if len(bands) == 1:
-            greyscale = True
-            print(f"Using band {bands}")
-        else:
-            greyscale = False
-            print(f"Using bands {bands}")
-        preview_data = None
-        try:
-            cv_window_title = "BaslerCamera waterfall preview"
-            cv2.namedWindow(cv_window_title)
-            cv2.startWindowThread()
-            self.device.StartGrabbing()
-            while True:
-                grab = self.device.RetrieveResult(
-                    5000, pylon.TimeoutHandling_ThrowException)
-                if grab.GrabSucceeded():
-                    img = np.asarray(grab.Array) / self.ref_scale_factor
-                    if preview_data is None:
-                        if greyscale:
-                            preview_data = np.ndarray((length, img.shape[1]))
-                        else:
-                            preview_data = np.ndarray((length, img.shape[1], 3))
-                    preview_data[1:] = preview_data[:-1]
-                    if greyscale:
-                        new_frame = img[bands]
-                    else:
-                        new_frame = np.ndarray((img.shape[1], 3))
-                        new_frame[:, 0] = img[bands[0]]
-                        new_frame[:, 1] = img[bands[1]]
-                        new_frame[:, 2] = img[bands[2]]
-                    if not flip:
-                        new_frame = np.flip(new_frame)
-                    preview_data[0] = new_frame
-                    if horizontal:
-                        preview = np.rot90(preview_data)
-                    else:
-                        preview = preview_data
-                    if scale_to:
-                        preview = cv2.resize(preview, scale_to)
-                    cv2.imshow(cv_window_title, preview)
-                    k = cv2.waitKey(1) & 0xFF
-                    if k == 27:
-                        break
-                grab.Release()
-        finally:
-            self.device.StopGrabbing()
-            self.device.Close()
-            cv2.destroyAllWindows()
+        img = self.result_image[self._current_frame, :, :]
+        img = img / self.ref_scale_factor
+        self._current_frame = (self._current_frame + 1) % self.result_image.shape[0]
+        if flip:
+            img = np.flipud(img)
+        if highlight:
+            img = highlight_saturated(img)
+        img = np.asarray(img * 255, dtype="uint8")
+        return img
 
-    # def capture_save(self, file_name, start, stop, velocity=None, flip=False,
-    #                  verbose=True, overwrite=False):
-    #     # """Capture a full hypersepectral image.
-
-        # File name may contain the following fields:
-        #     {date} - acquisition date (YY-mm-dd)
-        #     {time} - acquisition time (HH:MM:SS)
-        #     {bin} - pixel binning
-        #     {exp} - exposure time (in μs)
-        #     {gain} - gain in dB
-        #     {raw_gain} - raw gain value
-        #     {mode} - '8-bit' or '12-bit'
-        #     {start} - start position in mm
-        #     {stop} - stop position in mm
-        #     {travel} - distance travelled in mm
-        #     {vel} - velocity in mm/s
-        #     {frames} - number of frames captured
-        #     {samples} - number of samples per frame
-        #     {bands} - number of bands
-
-        # Args:
-        #     file_name: save location (without extension)
-        #     start: start position of stage (in mm)
-        #     stop: stop position of stage (in mm)
-        #     overwrite: overwrite existing files without prompt
-
-        # Kwargs:
-        #     velocity: stage velocity (in mm/s)
-        #     flip: flip order of columns in each frame
-        #     verbose: print progress messages
-        # """
-        # acq_time = datetime.now()
-        # if isinstance(stop, list):
-        #     data = self.capture_complex(start, stop, velocity=velocity, flip=flip,
-        #                         verbose=verbose)
-        #     stop = stop[-1]
-        # else:
-        #     data = self.capture(start, stop, velocity=velocity, flip=flip,
-        #                         verbose=verbose)
-        # md = {
-        #     'acquisition time': acq_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
-        #     'description': "Image captured with Basler piA1600-35gm\n",
-        #     'reflectance scale factor': self.ref_scale_factor,
-        #     'wavelength': self.wl
-        # }
-        # while True:
-        #     file_name = self._process_file_name(file_name, acq_time, start,
-        #                                         stop, velocity, data.shape)
-        #     try:
-        #         envi.save_image(file_name, data, dtype='uint16',
-        #                         interleave='bil', ext='.raw', metadata=md,
-        #                         force=overwrite)
-        #         break
-        #     except envi.EnviException:
-        #         new_name = input((f"File '{file_name}' exists. Enter new "
-        #                           f"name or leave blank to overwrite: "))
-        #         new_name = new_name.strip()
-        #         if new_name:
-        #             file_name = new_name
-        #         else:
-        #             overwrite = True
-        # if verbose:
-        #     print(f"Image saved as {file_name}.")
-        # return data, md
-
-    def capture_save(self, file_name, ranges, velocity=None, flip=False,
+    def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
                      verbose=True, overwrite=False):
         """Capture a full hypersepectral image.
 
@@ -286,8 +127,9 @@ class BaslerCamera:
 
         Args:
             file_name: save location (without extension)
-            start: start position of stage (in mm)
-            stop: stop position of stage (in mm)
+            stage: linear translation stage
+            ranges: list of ranges or single range to image, of the form
+                    (start, stop)
             overwrite: overwrite existing files without prompt
 
         Kwargs:
@@ -328,12 +170,13 @@ class BaslerCamera:
             print(f"Image saved as {file_name}.")
         return data, md
 
-    def capture(self, ranges, velocity=None, flip=False, verbose=True):
+    def capture(self, stage, ranges, velocity=None, flip=False, verbose=True):
         """Capture a full hypersepectral image.
 
         Args:
-            start: start position of stage (in mm)
-            stop: stop position of stage (in mm)
+            stage: linear translation stage
+            ranges: list of ranges or single range to image, of the form
+                    (start, stop)
 
         Kwargs:
             velocity: stage velocity (in mm/s)
@@ -344,7 +187,7 @@ class BaslerCamera:
         # TODO: 8-bit mode
         self.set_hardware_values()
         if not velocity:
-            velocity = self.stage.default_velocity
+            velocity = stage.default_velocity
         frames = []
         if not isinstance(ranges[0], tuple):
             ranges = [ranges]
@@ -364,11 +207,11 @@ class BaslerCamera:
             for r in ranges:
                 start = r[0]
                 stop = r[1]
-                self.stage.move_to(start, block=True)
-                self.stage.move_to(stop, velocity=velocity)
+                stage.move_to(start, block=True)
+                stage.move_to(stop, velocity=velocity)
                 self.device.StartGrabbing()
                 range_start_time = timeit.default_timer()
-                while self.stage.is_moving():
+                while stage.is_moving():
                     grab = self.device.RetrieveResult(
                         5000, pylon.TimeoutHandling_ThrowException)
                     if grab.GrabSucceeded():
@@ -434,16 +277,13 @@ class BaslerCamera:
             f"Binning: {self.binning}x{self.binning}",
             f"Samples: {self.n_samples}",
             f"Bands: {self.n_bands}",
-            f"Reflectance scale factor: {self.ref_scale_factor}",
-            f"Stage velocity: {self.stage._v} mm/s"
+            f"Reflectance scale factor: {self.ref_scale_factor}"
         ]
         return "\n".join(lines)
 
 
 class MockCamera:
-    def __init__(self, exp=4000, gain=100, binning=1, mode_12bit=True,
-                 stage=None, device=None):
-        self.stage = stage
+    def __init__(self, exp=4000, gain=100, binning=1, mode_12bit=True):
         self.raw_gain_factor = 1
         self.exp = exp
         self.gain = gain
@@ -484,7 +324,7 @@ class MockCamera:
         self.wl = img.bands.centers
         self._current_frame = 0
 
-    def capture_save(self, file_name, ranges, velocity=None, flip=False,
+    def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
                      verbose=True, overwrite=False):
         """Capture a full hypersepectral image.
 
@@ -506,8 +346,9 @@ class MockCamera:
 
         Args:
             file_name: save location (without extension)
-            start: start position of stage (in mm)
-            stop: stop position of stage (in mm)
+            stage: linear translation stage
+            ranges: list of ranges or single range to image, of the form
+                    (start, stop)
             overwrite: overwrite existing files without prompt
 
         Kwargs:
@@ -548,12 +389,13 @@ class MockCamera:
             print(f"Image saved as {file_name}.")
         return data, md
 
-    def capture(self, ranges, velocity=None, flip=False, verbose=True):
+    def capture(self, stage, ranges, velocity=None, flip=False, verbose=True):
         """Simulate capturing a full hypersepectral image.
 
         Args:
-            start: start position of stage (in mm)
-            stop: stop position of stage (in mm)
+            stage: linear translation stage
+            ranges: list of ranges or single range to image, of the form
+                    (start, stop)
 
         Kwargs:
             velocity: stage velocity (in mm/s)
@@ -565,8 +407,8 @@ class MockCamera:
         for r in ranges:
             start = r[0]
             stop = r[1]
-            self.stage.move_to(start, block=True)
-            self.stage.move_to(stop, velocity=velocity, block=True)
+            stage.move_to(start, block=True)
+            stage.move_to(stop, velocity=velocity, block=True)
         if flip:
             return np.fliplr(self.result_image)
         return self.result_image
@@ -580,7 +422,6 @@ class MockCamera:
         if highlight:
             img = highlight_saturated(img)
         img = np.asarray(img * 255, dtype="uint8")
-        # time.sleep(self.exp/1000000)
         return img
 
     def _process_file_name(self, fn, acq_time, start, stop, vel, shape):

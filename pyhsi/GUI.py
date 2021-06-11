@@ -13,8 +13,9 @@ from spectral.io import envi
 from spectral.io.spyfile import FileNotFoundError
 import tkinter as tk
 
+from . import __version__
 from .cameras import BaslerCamera, MockCamera
-from .stages import TSA200, DummyStage
+from .stages import TSA200, MockStage
 from .utils import get_rgb_bands, add_wavelength_labels
 
 DEBUG = 0
@@ -426,7 +427,7 @@ class PyHSI:
     def handle_event(self, event, values):
         self.log(f"Handling {event} event", level=DEBUG)
         if event == INIT_EVENT:
-            self.log("Starting PyHSI")
+            self.log(f"Starting PyHSI v{__version__}")
             self.set_camera_type(values)
         elif event in (EXP_INPUT, VELOCITY_INPUT,
                        RANGE_START_INPUT, RANGE_END_INPUT):
@@ -524,7 +525,7 @@ class PyHSI:
                         return False
                     self.stage = TSA200(port=serial.Serial(port.device))
                 else:
-                    self.stage = DummyStage()
+                    self.stage = MockStage()
                 self.stage_type = stage_type
         except Exception as e:
             self.log(f"Unable to connect to stage '{stage_type}': {e}",
@@ -536,9 +537,9 @@ class PyHSI:
         camera_type = values[CAMERA_TYPE_SEL]
         if not self.camera or camera_type != self.camera_type:
             if camera_type == CAMERA_TYPE_BASLER:
-                self.camera = BaslerCamera(stage=self.stage)
+                self.camera = BaslerCamera()
             else:
-                self.camera = MockCamera(stage=self.stage)
+                self.camera = MockCamera()
             self.camera_type = camera_type
         vals = self.parse_values(values)
         self.camera.set_exposure_time(vals['exp'])
@@ -692,7 +693,7 @@ class PyHSI:
             vals = self.parse_values(values)
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=True)
-            [img, md] = self.camera.capture_save(vals['file_name'], vals['ranges'],
+            [img, md] = self.camera.capture_save(vals['file_name'], self.stage, vals['ranges'],
                                                  vals['velocity'], flip=vals['flip'],
                                                  verbose=False)
             self.show_preview(img / 4095, md['wavelength'])  # TODO: Fix

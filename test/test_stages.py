@@ -22,11 +22,11 @@ class TestTSA200(unittest.TestCase):
         calls = [
             call.write(b'VM 382020' + serial.CR),
             call.read_until(serial.LF),
-            call.write(b'VI 382020' + serial.CR),
+            call.write(b'VI 95505' + serial.CR),
             call.read_until(serial.LF)
         ]
         self.mock_port.assert_has_calls(calls, any_order=False)
-        self.mock_port.write.assert_called_with(b'VI 382020' + serial.CR)
+        self.mock_port.write.assert_called_with(b'VI 95505' + serial.CR)
         self.assertEqual(self.stage._v, 30)
 
     def test_set_velocity_illegal(self):
@@ -39,7 +39,7 @@ class TestTSA200(unittest.TestCase):
         calls = [
             call.write(b'VM 382020' + serial.CR),
             call.read_until(serial.LF),
-            call.write(b'VI 382020' + serial.CR),
+            call.write(b'VI 95505' + serial.CR),
             call.read_until(serial.LF),
             call.write(b'MA 1273400' + serial.CR),
             call.read_until(serial.LF),
