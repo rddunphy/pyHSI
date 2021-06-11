@@ -81,6 +81,8 @@ CAPTURE_IMAGE_PROGRESS = "CaptureImageProgress"
 CONSOLE_OUTPUT = "ConsoleOutput"
 PREVIEW_CANVAS = "PreviewCanvas"
 
+ICON_APP = "pyhsi"
+
 
 def get_band_slider(key):
     return sg.Slider(
@@ -103,6 +105,14 @@ def get_screen_size():
     w, geometry = geometry.split('x')
     h = geometry.split('+')[0]
     return (int(w), int(h))
+
+
+def get_icon(name):
+    if os.name == "nt":
+        file_name = name + ".ico"
+    else:
+        file_name = name + "48.png"
+    return os.path.join("icons", file_name)
 
 
 def port_label(port):
@@ -141,6 +151,7 @@ class PyHSI:
         self.viewer_img = None
         self.window = sg.Window(
             title="PyHSI",
+            icon=get_icon(ICON_APP),
             layout=[[menubar], [content], [console]],
             enable_close_attempted_event=True,
             resizable=True,
