@@ -107,6 +107,12 @@ def get_screen_size():
     return (int(w), int(h))
 
 
+def port_label(port):
+    if port.product:
+        return f"{port.device}: {port.product}"
+    return str(port.device)
+
+
 class PyHSI:
     def __init__(self, debug=False):
         self.debug = debug
@@ -142,6 +148,7 @@ class PyHSI:
             resizable=True,
             finalize=True
         )
+        self.window.tk.call('tk', 'scaling', 1.0)
         for e in self.xy_expand_elements:
             e.expand(expand_x=True, expand_y=True)
         for e in self.x_expand_elements:
@@ -170,7 +177,7 @@ class PyHSI:
         stages = [STAGE_TYPE_TSA200, STAGE_TYPE_MOCK]
         self.ports = list_ports.comports()
         if len(self.ports) > 0:
-            ports = [p.device + ": " + p.product for p in self.ports]
+            ports = [port_label(p) for p in self.ports]
         else:
             ports = ["No ports found"]
         camera_frame = sg.Frame("Camera", [
@@ -517,7 +524,7 @@ class PyHSI:
                     pstr = values[STAGE_PORT_SEL]
                     port = None
                     for p in self.ports:
-                        if pstr == p.device + ": " + p.product:
+                        if pstr == port_label(p):
                             port = p
                     if port is None:
                         self.log(f"No serial port for stage '{stage_type}'",
