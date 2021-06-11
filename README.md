@@ -17,26 +17,28 @@ Python modules for controlling hyperspectral imaging equipment
 
 ### `pyhsi.cameras`
 
-Currently contains a single class, `BaslerCamera`, representing the [Basler
-piA1600-35gm](https://www.baslerweb.com/en/products/cameras/area-scan-cameras/pilot/pia1600-35gc/).
+Module for linear translation stages. This module currently has two classes:
+
+* `BaslerCamera` for the [Basler piA1600-35gm](https://www.baslerweb.com/en/products/cameras/area-scan-cameras/pilot/pia1600-35gc/)
+* `MockCamera` for simulating a camera when no physical device is available -
+  this iterates through frames of a source image, which can be set with
+  `MockCamera.set_result_image()`
 
 Usage example:
 
 ```python
 from pyhsi.cameras import BaslerCamera
+from pyhsi.stages import TSA200
 
 # Instantiate camera with 4x4 pixel binning and a raw gain value of 400
 cam = BaslerCamera(gain=400, binning=4)
 
-# Show live preview from camera - press Escape to exit
-cam.preview()
-
-# Show waterfall preview - press Escape to exit
-cam.waterfall()
+# Instantiate the linear translation stage
+stage = TSA200()
 
 # Capture an image of translation stage from 0 to 120 mm at 10 mm/s, 
 # and save the result to "sample_2000-01-01_12:00:00.hdr"
-cam.capture_save("sample_{date}_{time}", 0, 120, velocity=10)
+cam.capture_save("sample_{date}_{time}", stage, [0, 120], velocity=10)
 ```
 
 
@@ -45,21 +47,29 @@ cam.capture_save("sample_{date}_{time}", 0, 120, velocity=10)
 Module for linear translation stages. This module currently has two classes:
 
 * `TSA200` for the Zolix TSA200-B and TSA200-BF linear translation stages
-* `DummyStage` for simulating a stage when no physical connection is available
+* `MockStage` for simulating a stage when no physical connection is available
 
 
 ### `pyhsi.utils`
 
 Utility tools for displaying and working with HSI files.
 
-* `get_wavelength(n_bandx, min_wl, max_wl)` - returns list of equidistant
+* `get_wavelengths(n_bands, min_wl, max_wl)` - returns list of equidistant
   wavelengths from the specified range
 * `nearest_band(wavelengths, target)` - returns index of the wavelengths that
   is closest to target wavelength
+* `get_rgb_bands(wavelengths)` - select three bands corresponding to red, green,
+  and blue light. If `wavelengths` doen't cover the visible spectrum, returns
+  three equidistant bands for pseudocolouring instead.
 * `highlight_saturated(img)` - takes a greyscale image and returns an RGB
   representation, with light-saturated pixels highlighted in red and
   dark-saturated pixels highlighted in blue
 * `image_play(img)` - play video representation of hyperspectral image
+* `show_preview(img)` - show a pseudocolour representation of the image using
+  Matplotlib
+* `show_band(img, band)` - show a specific band of an image in greyscale
+* `add_wavelength_labels(img, wl, rot=0)` - add labels with wavelength data
+  along one axis of the image, for a given rotation
 
 
 ## Capturing HSI data
