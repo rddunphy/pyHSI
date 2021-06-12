@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   aria-hidden="true"
+   focusable="false"
+   data-prefix="fas"
+   data-icon="undo"
+   class="svg-inline--fa fa-undo fa-w-16"
+   role="img"
+   viewBox="0 0 512 512"
+   version="1.1"
+   id="svg4"
+   sodipodi:docname="rotate-left.svg"
+   inkscape:export-filename="/home/david/PhD/pyHSI/icons/rotate-left.png"
+   inkscape:export-xdpi="12.19"
+   inkscape:export-ydpi="12.19"
+   inkscape:version="0.92.5 (2060ec1f9f, 2020-04-08)">
+  <metadata
+     id="metadata10">
+    <rdf:RDF>
+      <cc:Work
+         rdf:about="">
+        <dc:format>image/svg+xml</dc:format>
+        <dc:type
+           rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
+        <dc:title></dc:title>
+      </cc:Work>
+    </rdf:RDF>
+  </metadata>
+  <defs
+     id="defs8" />
+  <sodipodi:namedview
+     pagecolor="#ffffff"
+     bordercolor="#666666"
+     borderopacity="1"
+     objecttolerance="10"
+     gridtolerance="10"
+     guidetolerance="10"
+     inkscape:pageopacity="0"
+     inkscape:pageshadow="2"
+     inkscape:window-width="3840"
+     inkscape:window-height="2015"
+     id="namedview6"
+     showgrid="false"
+     inkscape:pagecheckerboard="true"
+     inkscape:zoom="0.4609375"
+     inkscape:cx="256"
+     inkscape:cy="256"
+     inkscape:window-x="0"
+     inkscape:window-y="0"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg4" />
+  <path
+     d="M 226.27465,234.01645 H 96.058201 c -4.30755,0 -7.8,-3.49245 -7.8,-7.8 V 96 c 0,-4.30755 3.49245,-7.8 7.8,-7.8 H 127.2582 c 4.30755,0 7.8,3.49245 7.8,7.8 v 50.7728 c 29.75245,-33.04145 72.969,-53.7173 121.01375,-53.36825 88.9889,0.6461 160.1912,72.55495 160.00205,161.5458 C 415.88485,343.8177 343.7862,415.8 254.87465,415.8 c -41.65785,0 -79.6224,-15.80345 -108.2315,-41.73975 -3.31435,-3.0043 -3.4671,-8.1601 -0.30355,-11.323 l 22.07855,-22.07855 c 2.9081,-2.9081 7.5803,-3.06605 10.66065,-0.34125 C 199.2522,358.1684 225.7852,369 254.87465,369 c 63.2242,0 114.4,-51.1654 114.4,-114.4 0,-63.22355 -51.1654,-114.4 -114.4,-114.4 -38.0224,0 -71.682,18.5094 -92.4781,47.01645 h 63.8781 c 4.30755,0 7.8,3.49245 7.8,7.8 v 31.2 c 0,4.30755 -3.49245,7.8 -7.8,7.8 z"
+     id="path2"
+     style="fill:#ffffff;stroke-width:0.64999998"
+     inkscape:connector-curvature="0" />
+</svg>

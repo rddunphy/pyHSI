@@ -39,7 +39,7 @@ STAGE_TYPE_SEL = "StageSelect"
 STAGE_TYPE_MOCK = "Mock stage"
 STAGE_TYPE_TSA200 = "Zolix TSA200"
 STAGE_PORT_SEL = "StagePortSelect"
-PORT_REFRESH_BTN = "PortRefresh"
+PORT_RELOAD_BTN = "PortRefresh"
 STAGE_PORT_PANE = "PortRefreshPanel"
 EXP_INPUT = "ExposureInput"
 EXP_FDB = "ExposureFeedback"
@@ -81,7 +81,16 @@ CAPTURE_IMAGE_PROGRESS = "CaptureImageProgress"
 CONSOLE_OUTPUT = "ConsoleOutput"
 PREVIEW_CANVAS = "PreviewCanvas"
 
+ICON_DIR = "icons"
 ICON_APP = "pyhsi"
+ICON_RELOAD = "reload"
+ICON_OPEN = "open"
+ICON_PLAY = "play"
+ICON_PAUSE = "pause"
+ICON_ROT_LEFT = "rotate-left"
+ICON_ROT_RIGHT = "rotate-right"
+ICON_DELETE = "delete"
+ICON_CAMERA = "camera"
 
 
 def get_band_slider(key):
@@ -107,12 +116,18 @@ def get_screen_size():
     return (int(w), int(h))
 
 
-def get_icon(name):
-    if os.name == "nt":
-        file_name = name + ".ico"
-    else:
-        file_name = name + "48.png"
-    return os.path.join("icons", file_name)
+def get_icon_button(icon, key=None, button_type=None, file_types=None,
+                    initial_folder=None, disabled=False, tooltip=None):
+    mc = ("white", "#405e92")
+    icon_path = os.path.join(ICON_DIR, icon + ".png")
+    if button_type is not None:
+        return sg.Button("", image_filename=icon_path, key=key,
+                         disabled=disabled, button_type=button_type,
+                         file_types=file_types, target=(sg.ThisRow, -1),
+                         initial_folder=initial_folder, tooltip=tooltip, 
+                         mouseover_colors=mc)
+    return sg.Button("", image_filename=icon_path, key=key, disabled=disabled,
+                     tooltip=tooltip, mouseover_colors=mc)
 
 
 def port_label(port):
@@ -124,6 +139,7 @@ def port_label(port):
 class PyHSI:
     def __init__(self, debug=False):
         self.debug = debug
+        self.default_folder = os.environ['HOME']
         sg.set_options(font=("latin modern sans", 14))
         self.xy_expand_elements = []
         self.x_expand_elements = []
@@ -149,9 +165,11 @@ class PyHSI:
         self.stage_type = None
         self.viewer_file = None
         self.viewer_img = None
+        icon_ext = ".ico" if sg.running_windows() else ".png"
+        icon_path = os.path.join(ICON_DIR, ICON_APP + icon_ext)
+        sg.set_global_icon(icon_path)
         self.window = sg.Window(
             title="PyHSI",
-            icon=get_icon(ICON_APP),
             layout=[[menubar], [content], [console]],
             enable_close_attempted_event=True,
             resizable=True,
@@ -199,7 +217,8 @@ class PyHSI:
                     sg.Text("Source file", size=label_size, pad=label_pad),
                     sg.Input("", size=(20, 1), key=CAMERA_MOCK_FILE,
                              enable_events=True),
-                    sg.FileBrowse(file_types=(("ENVI", "*.hdr"),))
+                    get_icon_button(ICON_OPEN, button_type=sg.BUTTON_TYPE_BROWSE_FILE,
+                                    file_types=(("ENVI", "*.hdr"),), initial_folder=self.default_folder, tooltip="Browse")
                 ]], key=CAMERA_MOCK_CONTROL_PANE, pad=(0, 0), visible=False))
             ],
             [
@@ -243,7 +262,7 @@ class PyHSI:
                     sg.Text("Port", size=label_size, pad=label_pad),
                     sg.Combo(ports, default_value=ports[0], disabled=(
                         len(self.ports) == 0), key=STAGE_PORT_SEL, readonly=True),
-                    sg.Button("Reload", key=PORT_REFRESH_BTN)
+                    get_icon_button(ICON_RELOAD, key=PORT_RELOAD_BTN, tooltip="Reload port list")
                     # TODO: dynamically detect when port list changes?
                 ]], key=STAGE_PORT_PANE, pad=(0, 0)))
             ],
@@ -306,14 +325,13 @@ class PyHSI:
                 sg.Checkbox("Interpolation", key=PREVIEW_INTERP_CB, enable_events=True)
             ],
             [
-                sg.Button("Start", key=PREVIEW_BTN),
-                sg.Button("Rotate left", key=PREVIEW_ROTLEFT_BTN),
-                sg.Button("Rotate right", key=PREVIEW_ROTRIGHT_BTN),
-                sg.Button("Clear", key=PREVIEW_CLEAR_BTN)
+                get_icon_button(ICON_PLAY, key=PREVIEW_BTN, tooltip="Toggle preview"),
+                get_icon_button(ICON_ROT_LEFT, key=PREVIEW_ROTLEFT_BTN, tooltip="Rotate preview left"),
+                get_icon_button(ICON_ROT_RIGHT, key=PREVIEW_ROTRIGHT_BTN, tooltip="Rotate preview right"),
+                get_icon_button(ICON_DELETE, key=PREVIEW_CLEAR_BTN, tooltip="Clear preview", disabled=True)
             ]
         ])
         formats = [FORMAT_ENVI]
-        default_folder = os.environ['HOME']
         file_names = ["{date}_{n}", "{date}_dark_ref"]
         output_frame = sg.Frame("Output", [
             [
@@ -322,15 +340,15 @@ class PyHSI:
             ],
             [
                 sg.Text("Folder", size=label_size, pad=label_pad),
-                sg.Input(default_folder, size=(20, 1), key=OUTPUT_FOLDER, enable_events=True),
-                sg.FolderBrowse(initial_folder=default_folder)
+                sg.Input(self.default_folder, size=(20, 1), key=OUTPUT_FOLDER, enable_events=True),
+                get_icon_button(ICON_OPEN, button_type=sg.BUTTON_TYPE_BROWSE_FOLDER, initial_folder=self.default_folder, tooltip="Browse")
             ],
             [
                 sg.Text("File name", size=label_size, pad=label_pad),
                 sg.Combo(file_names, default_value=file_names[0], key=SAVE_FILE)
             ],
             [
-                sg.Button("Capture image", key=CAPTURE_IMAGE_BTN),
+                get_icon_button(ICON_CAMERA, key=CAPTURE_IMAGE_BTN, tooltip="Capture image and save"),
                 sg.ProgressBar(1.0, size=(30, 50), visible=False, key=CAPTURE_IMAGE_PROGRESS)
             ]
         ])
@@ -490,7 +508,7 @@ class PyHSI:
         elif event == PREVIEW_INTERP_CB:
             if not self.live_preview_active:
                 self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
-        elif event == PORT_REFRESH_BTN:
+        elif event == PORT_RELOAD_BTN:
             self.refresh_stage_ports()
         elif event == STAGE_TYPE_SEL:
             if values[STAGE_TYPE_SEL] == STAGE_TYPE_MOCK:
@@ -615,11 +633,16 @@ class PyHSI:
                 return
         self.live_preview_active = True
         self.next_live_preview_frame(values)
-        self.window[PREVIEW_BTN].update(text="Stop")
+        icon_path = os.path.join(ICON_DIR, ICON_PAUSE + ".png")
+        self.window[PREVIEW_BTN].update(image_filename=icon_path)
+        self.window[PREVIEW_CLEAR_BTN].update(disabled=False)
 
     def stop_live_preview(self):
         self.log("Stopping live preview", level=DEBUG)
-        self.window[PREVIEW_BTN].update(text="Start")
+        icon_path = os.path.join(ICON_DIR, ICON_PLAY + ".png")
+        self.window[PREVIEW_BTN].update(image_filename=icon_path)
+        if self.live_preview_frame is None:
+            self.window[PREVIEW_CLEAR_BTN].update(disabled=True)
         self.live_preview_active = False
 
     def clear_preview(self):
@@ -628,6 +651,7 @@ class PyHSI:
         self.window[PREVIEW_CANVAS].update(data=None)
         self.waterfall_frame = None
         self.live_preview_frame = None
+        self.window[PREVIEW_CLEAR_BTN].update(disabled=True)
 
     def next_live_preview_frame(self, values):
         # Pseudocolour takes precedence over highlight
