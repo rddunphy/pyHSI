@@ -326,8 +326,8 @@ class PyHSI:
             ],
             [
                 get_icon_button(ICON_PLAY, key=PREVIEW_BTN, tooltip="Toggle preview"),
-                get_icon_button(ICON_ROT_LEFT, key=PREVIEW_ROTLEFT_BTN, tooltip="Rotate preview left"),
-                get_icon_button(ICON_ROT_RIGHT, key=PREVIEW_ROTRIGHT_BTN, tooltip="Rotate preview right"),
+                get_icon_button(ICON_ROT_LEFT, key=PREVIEW_ROTLEFT_BTN, tooltip="Rotate preview left", disabled=True),
+                get_icon_button(ICON_ROT_RIGHT, key=PREVIEW_ROTRIGHT_BTN, tooltip="Rotate preview right", disabled=True),
                 get_icon_button(ICON_DELETE, key=PREVIEW_CLEAR_BTN, tooltip="Clear preview", disabled=True)
             ]
         ])
@@ -654,13 +654,13 @@ class PyHSI:
         icon_path = os.path.join(ICON_DIR, ICON_PAUSE + ".png")
         self.window[PREVIEW_BTN].update(image_filename=icon_path)
         self.window[PREVIEW_CLEAR_BTN].update(disabled=False)
+        self.window[PREVIEW_ROTLEFT_BTN].update(disabled=False)
+        self.window[PREVIEW_ROTRIGHT_BTN].update(disabled=False)
 
     def stop_live_preview(self):
         self.log("Stopping live preview", level=DEBUG)
         icon_path = os.path.join(ICON_DIR, ICON_PLAY + ".png")
         self.window[PREVIEW_BTN].update(image_filename=icon_path)
-        if self.live_preview_frame is None:
-            self.window[PREVIEW_CLEAR_BTN].update(disabled=True)
         self.live_preview_active = False
 
     def clear_preview(self):
@@ -670,6 +670,8 @@ class PyHSI:
         self.waterfall_frame = None
         self.live_preview_frame = None
         self.window[PREVIEW_CLEAR_BTN].update(disabled=True)
+        self.window[PREVIEW_ROTLEFT_BTN].update(disabled=True)
+        self.window[PREVIEW_ROTRIGHT_BTN].update(disabled=True)
 
     def next_live_preview_frame(self, values):
         # Pseudocolour takes precedence over highlight
