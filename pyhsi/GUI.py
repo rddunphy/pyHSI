@@ -181,7 +181,7 @@ class PyHSI:
             e.expand(expand_x=True, expand_y=False, expand_row=False)
         sg.cprint_set_output_destination(self.window, CONSOLE_OUTPUT)
         self.log(f"Screen size: {screen_size}", level=DEBUG)
-        self.log(f"Canvas size: {self.view_canvas_size}", level=DEBUG)
+        self.log(f"Window size: {self.window.size}", level=DEBUG)
 
     def log(self, message, level=INFO):
         if self.debug or level > DEBUG:
@@ -518,13 +518,31 @@ class PyHSI:
         elif event in (MENU_QUIT, sg.WINDOW_CLOSE_ATTEMPTED_EVENT):
             self.exit()
 
+    def confirm_popup(self, title, text):
+        popup = sg.Window(
+            title,
+            [[sg.Text(text)],
+             [sg.Button("OK", bind_return_key=True), sg.Button("Cancel")]],
+            keep_on_top=True,
+            modal=True,
+            alpha_channel=0,
+            finalize=True
+        )
+        wx, wy = self.window.current_location()
+        ww, wh = self.window.size
+        pw, ph = popup.size
+        popup.move(wx + ww//2 - pw//2, wy + wh//2 - ph//2)
+        popup.set_alpha(1)
+        event, _ = popup.read(close=True)
+        return event == "OK" 
+
     def exit(self):
         # TODO: Cleanup code / check there are no ongoing processes
         # We don't want to exit in the middle of capturing an image - in this
         # case probably display a prompt?
         if self.live_preview_active:
-            confirm = sg.popup_ok_cancel("Are you sure you want to exit?", title="Confirm close")
-            if confirm != "OK":
+            msg = "Are you sure you want to exit PyHSI?"
+            if not self.confirm_popup("Confirm exit", msg):
                 return
             self.stop_live_preview()
         self.log("Exiting PyHSI", level=DEBUG)
