@@ -260,8 +260,14 @@ class PyHSI:
             [
                 sg.pin(sg.Column([[
                     sg.Text("Port", size=label_size, pad=label_pad),
-                    sg.Combo(ports, default_value=ports[0], disabled=(
-                        len(self.ports) == 0), key=STAGE_PORT_SEL, readonly=True),
+                    sg.Combo(
+                        ports,
+                        default_value=ports[0],
+                        disabled=(len(self.ports) == 0),
+                        key=STAGE_PORT_SEL,
+                        size=(20,1),
+                        readonly=True
+                    ),
                     get_icon_button(ICON_RELOAD, key=PORT_RELOAD_BTN, tooltip="Reload port list")
                     # TODO: dynamically detect when port list changes?
                 ]], key=STAGE_PORT_PANE, pad=(0, 0)))
@@ -374,14 +380,19 @@ class PyHSI:
         elif field == RANGE_START_INPUT or field == RANGE_END_INPUT:
             self.parse_numeric(value, float, 0, 196, RANGE_FDB)
 
-    def refresh_stage_ports(self):
+    def reload_stage_ports(self):
         self.ports = list_ports.comports()
         self.log(f"Found {len(self.ports)} available serial ports.")
-        ports = self.ports if len(self.ports) > 0 else ["No ports found"]
+        if len(self.ports) > 0:
+            ports = [port_label(p) for p in self.ports]
+        else:
+            ports = ["No ports found"]
         self.window[STAGE_PORT_SEL].update(
             values=ports,
             value=ports[0],
-            disabled=(len(self.ports) == 0))
+            disabled=(len(self.ports) == 0),
+            readonly=True
+        )
 
     def update_gain_label(self, values):
         gain = self.parse_numeric(values[GAIN_INPUT], int, 0, 500, GAIN_FDB)
@@ -509,7 +520,7 @@ class PyHSI:
             if not self.live_preview_active:
                 self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
         elif event == PORT_RELOAD_BTN:
-            self.refresh_stage_ports()
+            self.reload_stage_ports()
         elif event == STAGE_TYPE_SEL:
             if values[STAGE_TYPE_SEL] == STAGE_TYPE_MOCK:
                 self.window[STAGE_PORT_PANE].update(visible=False)
