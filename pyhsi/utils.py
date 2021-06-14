@@ -90,7 +90,7 @@ def add_wavelength_labels(img, wl, rot=0):
         else:
             p1 = (pos, 10)
             p2 = (pos, 25)
-            org = (pos - 30, 60)
+            org = (pos - 15, 45)
             text = str(v)
         font = cv2.FONT_HERSHEY_SIMPLEX
         scale = 0.5
