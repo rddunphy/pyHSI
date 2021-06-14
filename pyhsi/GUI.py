@@ -1,5 +1,6 @@
 from datetime import datetime
 import json
+from json.decoder import JSONDecodeError
 import os
 import sys
 
@@ -28,8 +29,8 @@ LOG_COLOURS = {
     ERROR: "red"
 }
 INIT_EVENT = "Init"
-MENU_SAVE_CONFIG = "Save current configuration..."
-MENU_LOAD_CONFIG = "Load configuration file..."
+MENU_SAVE_CONFIG = "Save configuration as..."
+MENU_LOAD_CONFIG = "Load configuration..."
 MENU_QUIT = "Quit"
 
 CAMERA_TYPE_SEL = "CameraSelect"
@@ -97,13 +98,14 @@ ICON_CAMERA = "camera"
 
 CONFIG_KEYS = (
     CAMERA_TYPE_SEL, CAMERA_MOCK_FILE, EXP_INPUT, BINNING_SEL, GAIN_INPUT,
-    REVERSE_COLUMNS_CB, STAGE_TYPE_SEL, STAGE_PORT_SEL, RANGE_START_INPUT,
-    RANGE_END_INPUT, VELOCITY_INPUT, PREVIEW_WATERFALL_CB,
-    PREVIEW_PSEUDOCOLOUR_CB, PREVIEW_SINGLE_BAND_SLIDER,
-    PREVIEW_RED_BAND_SLIDER, PREVIEW_GREEN_BAND_SLIDER,
-    PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB, PREVIEW_INTERP_CB,
-    OUTPUT_FORMAT_SEL, OUTPUT_FOLDER, SAVE_FILE
+    REVERSE_COLUMNS_CB, STAGE_TYPE_SEL, RANGE_START_INPUT, RANGE_END_INPUT,
+    VELOCITY_INPUT, PREVIEW_WATERFALL_CB, PREVIEW_PSEUDOCOLOUR_CB,
+    PREVIEW_SINGLE_BAND_SLIDER, PREVIEW_RED_BAND_SLIDER,
+    PREVIEW_GREEN_BAND_SLIDER, PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB,
+    PREVIEW_INTERP_CB, OUTPUT_FORMAT_SEL, OUTPUT_FOLDER, SAVE_FILE
 )
+CONFIG_COMPAT_VERSIONS = ("0.2.0")
+DEFAULT_CONFIG_PATH = "default_config.phc"
 
 
 def get_band_slider(key):
@@ -195,8 +197,11 @@ class PyHSI:
         for e in self.x_expand_elements:
             e.expand(expand_x=True, expand_y=False, expand_row=False)
         sg.cprint_set_output_destination(self.window, CONSOLE_OUTPUT)
+        self.log(f"Starting PyHSI v{__version__}")
         self.log(f"Screen size: {screen_size}", level=DEBUG)
         self.log(f"Window size: {self.window.size}", level=DEBUG)
+        if os.path.isfile(DEFAULT_CONFIG_PATH):
+            self.load_config(config_file=DEFAULT_CONFIG_PATH)
 
     def log(self, message, level=INFO):
         if self.debug or level > DEBUG:
@@ -467,7 +472,9 @@ class PyHSI:
         values[PREVIEW_BLUE_BAND_SLIDER] = b
         self.update_preview_slider_labels(values)
 
-    def set_camera_type(self, values):
+    def update_view(self, values=None):
+        if values is None:
+            _, values = self.window.read(timeout=0)
         if values[CAMERA_TYPE_SEL] == CAMERA_TYPE_MOCK:
             self.window[CAMERA_MOCK_CONTROL_PANE].update(visible=True)
             self.window[CAMERA_REAL_CONTROL_PANE].update(visible=False)
@@ -477,17 +484,26 @@ class PyHSI:
         self.setup_camera(values)
         self.update_gain_label(values)
         self.update_preview_slider_ranges(values)
+        pc_disabled = not values[PREVIEW_WATERFALL_CB]
+        hl_disabled = values[PREVIEW_WATERFALL_CB] and values[PREVIEW_PSEUDOCOLOUR_CB]
+        self.window[PREVIEW_PSEUDOCOLOUR_CB].update(disabled=pc_disabled)
+        self.window[PREVIEW_HIGHLIGHT_CB].update(disabled=hl_disabled)
+        single_vis = not pc_disabled and not values[PREVIEW_PSEUDOCOLOUR_CB]
+        rgb_vis = not pc_disabled and values[PREVIEW_PSEUDOCOLOUR_CB]
+        self.window[PREVIEW_RGB_BAND_PANE].update(visible=rgb_vis)
+        self.window[PREVIEW_SINGLE_BAND_PANE].update(visible=single_vis)
+        if not self.live_preview_active:
+            self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
 
     def handle_event(self, event, values):
         self.log(f"Handling {event} event", level=DEBUG)
         if event == INIT_EVENT:
-            self.log(f"Starting PyHSI v{__version__}")
-            self.set_camera_type(values)
+            self.update_view(values)
         elif event in (EXP_INPUT, VELOCITY_INPUT,
                        RANGE_START_INPUT, RANGE_END_INPUT):
             self.validate(event)
         elif event == CAMERA_TYPE_SEL:
-            self.set_camera_type(values)
+            self.update_view(values)
         elif event == GAIN_INPUT:
             self.update_gain_label(values)
         elif event == BINNING_SEL:
@@ -521,16 +537,7 @@ class PyHSI:
         elif event == PREVIEW_CLEAR_BTN:
             self.clear_preview()
         elif event == PREVIEW_WATERFALL_CB or event == PREVIEW_PSEUDOCOLOUR_CB:
-            pc_disabled = not values[PREVIEW_WATERFALL_CB]
-            hl_disabled = values[PREVIEW_WATERFALL_CB] and values[PREVIEW_PSEUDOCOLOUR_CB]
-            self.window[PREVIEW_PSEUDOCOLOUR_CB].update(disabled=pc_disabled)
-            self.window[PREVIEW_HIGHLIGHT_CB].update(disabled=hl_disabled)
-            single_vis = not pc_disabled and not values[PREVIEW_PSEUDOCOLOUR_CB]
-            rgb_vis = not pc_disabled and values[PREVIEW_PSEUDOCOLOUR_CB]
-            self.window[PREVIEW_RGB_BAND_PANE].update(visible=rgb_vis)
-            self.window[PREVIEW_SINGLE_BAND_PANE].update(visible=single_vis)
-            if not self.live_preview_active:
-                self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
+            self.update_view(values)
         elif event == PREVIEW_INTERP_CB:
             if not self.live_preview_active:
                 self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
@@ -551,31 +558,45 @@ class PyHSI:
     def save_config(self, values):
         config = {k: v for k, v in values.items() if k in CONFIG_KEYS}
         config["Version"] = __version__
-        config_file = sg.popup_get_file(
-            "msg", title="Save configuration",
-            default_path=self.default_folder, file_types=("JSON", "*.json"),
-            save_as=True)
+        config_file = tk.filedialog.asksaveasfilename(
+            filetypes=(("PyHSI config", "*.phc"),),
+            defaultextension='.phc', 
+            initialdir=self.default_folder, 
+            parent=self.window.TKroot
+        )
+        if config_file is None or config_file == "":
+            # User pressed cancel
+            return
         try:
             with open(config_file, 'w') as f:
-                f.write(json.dumps(config))
+                f.write(json.dumps(config, indent=4) + "\n")
                 self.log(f"Saved current configuration to {config_file}")
         except IOError as e:
             self.log(f"Unable to write config file: {e}", ERROR)
 
-    def load_config(self):
-        config_file = sg.popup_get_file(
-            "msg", title="Save configuration",
-            default_path=self.default_folder, file_types=("JSON", "*.json"),
-            save_as=True)
+    def load_config(self, config_file=None):
+        if config_file is None:
+            config_file = tk.filedialog.askopenfilename(
+                filetypes=(("PyHSI config", "*.phc"),),
+                initialdir=self.default_folder,
+                parent=self.window.TKroot)
+        else:
+            config_file = os.path.abspath(config_file)
+        if config_file is None or config_file == "":
+            # User pressed cancel
+            return
         try:
             with open(config_file, 'r') as f:
                 config = json.load(f)
                 v = config["Version"]
-                if v != "0.2.0":
-                    self.log(f"Configuration file version ({v}) incompatible with PyHSI v{__version__}", ERROR)
-                self.window[VELOCITY_INPUT].update(value=config[VELOCITY_INPUT])
+                if v not in CONFIG_COMPAT_VERSIONS:
+                    raise IOError(f"Configuration file version {v} incompatible with PyHSI v{__version__} for {config_file}")
+                for key in CONFIG_KEYS:
+                    if key in config:
+                        self.window[key].update(value=config[key])
                 self.log(f"Loaded configuration from {config_file}")
-        except IOError as e:
+                self.update_view()
+        except (IOError, JSONDecodeError) as e:
             self.log(f"Unable to read config file: {e}", ERROR)
 
     def confirm_popup(self, title, text):
