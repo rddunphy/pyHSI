@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 import os
 import sys
 
@@ -27,6 +28,8 @@ LOG_COLOURS = {
     ERROR: "red"
 }
 INIT_EVENT = "Init"
+MENU_SAVE_CONFIG = "Save current configuration..."
+MENU_LOAD_CONFIG = "Load configuration file..."
 MENU_QUIT = "Quit"
 
 CAMERA_TYPE_SEL = "CameraSelect"
@@ -92,6 +95,16 @@ ICON_ROT_RIGHT = "rotate-right"
 ICON_DELETE = "delete"
 ICON_CAMERA = "camera"
 
+CONFIG_KEYS = (
+    CAMERA_TYPE_SEL, CAMERA_MOCK_FILE, EXP_INPUT, BINNING_SEL, GAIN_INPUT,
+    REVERSE_COLUMNS_CB, STAGE_TYPE_SEL, STAGE_PORT_SEL, RANGE_START_INPUT,
+    RANGE_END_INPUT, VELOCITY_INPUT, PREVIEW_WATERFALL_CB,
+    PREVIEW_PSEUDOCOLOUR_CB, PREVIEW_SINGLE_BAND_SLIDER,
+    PREVIEW_RED_BAND_SLIDER, PREVIEW_GREEN_BAND_SLIDER,
+    PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB, PREVIEW_INTERP_CB,
+    OUTPUT_FORMAT_SEL, OUTPUT_FOLDER, SAVE_FILE
+)
+
 
 def get_band_slider(key):
     return sg.Slider(
@@ -149,7 +162,9 @@ class PyHSI:
         self.live_preview_frame = None
         self.view_canvas_size = (round(screen_size[0] * 0.6),
                                  round(screen_size[1] * 0.7))
-        menubar = sg.Menu([["&File", [MENU_QUIT]]])
+        menubar = sg.Menu([
+            ["&File", [MENU_SAVE_CONFIG, MENU_LOAD_CONFIG, MENU_QUIT]]
+        ])
         content = [
             [
                 sg.Column(self.capture_control_panel(), expand_y=True, expand_x=True),
@@ -526,8 +541,42 @@ class PyHSI:
                 self.window[STAGE_PORT_PANE].update(visible=False)
             else:
                 self.window[STAGE_PORT_PANE].update(visible=True)
+        elif event == MENU_SAVE_CONFIG:
+            self.save_config(values)
+        elif event == MENU_LOAD_CONFIG:
+            self.load_config()
         elif event in (MENU_QUIT, sg.WINDOW_CLOSE_ATTEMPTED_EVENT):
             self.exit()
+
+    def save_config(self, values):
+        config = {k: v for k, v in values.items() if k in CONFIG_KEYS}
+        config["Version"] = __version__
+        config_file = sg.popup_get_file(
+            "msg", title="Save configuration",
+            default_path=self.default_folder, file_types=("JSON", "*.json"),
+            save_as=True)
+        try:
+            with open(config_file, 'w') as f:
+                f.write(json.dumps(config))
+                self.log(f"Saved current configuration to {config_file}")
+        except IOError as e:
+            self.log(f"Unable to write config file: {e}", ERROR)
+
+    def load_config(self):
+        config_file = sg.popup_get_file(
+            "msg", title="Save configuration",
+            default_path=self.default_folder, file_types=("JSON", "*.json"),
+            save_as=True)
+        try:
+            with open(config_file, 'r') as f:
+                config = json.load(f)
+                v = config["Version"]
+                if v != "0.2.0":
+                    self.log(f"Configuration file version ({v}) incompatible with PyHSI v{__version__}", ERROR)
+                self.window[VELOCITY_INPUT].update(value=config[VELOCITY_INPUT])
+                self.log(f"Loaded configuration from {config_file}")
+        except IOError as e:
+            self.log(f"Unable to read config file: {e}", ERROR)
 
     def confirm_popup(self, title, text):
         popup = sg.Window(
