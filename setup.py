@@ -19,6 +19,7 @@ setup(
         'pyserial>=3.5',
         'spectral>=0.22',
         'PySimpleGUI>=4.41',
-        'matplotlib>=3.4'
+        'matplotlib>=3.4',
+        'tk'
     ]
 )

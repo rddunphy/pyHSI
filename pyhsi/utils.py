@@ -84,18 +84,18 @@ def add_wavelength_labels(img, wl, rot=0):
             pos = round(img.shape[1] * (v - w0) / (w1 - w0))
         if rot % 2:
             p1 = (10, pos)
-            p2 = (30, pos)
-            org = (40, pos + 10)
+            p2 = (25, pos)
+            org = (35, pos + 5)
             text = f"{v} nm"
         else:
             p1 = (pos, 10)
-            p2 = (pos, 30)
+            p2 = (pos, 25)
             org = (pos - 30, 60)
             text = str(v)
         font = cv2.FONT_HERSHEY_SIMPLEX
-        scale = 1
+        scale = 0.5
         colour = (0, 255, 0)
-        thickness = 2
+        thickness = 1
         img = cv2.line(img, p1, p2, colour, thickness)
         if v > w0 + margin and v < w1 - margin:
             img = cv2.putText(img, text, org, font, scale, colour, thickness)

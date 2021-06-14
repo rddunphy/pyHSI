@@ -109,11 +109,10 @@ def get_screen_size():
     root.update_idletasks()
     root.attributes('-fullscreen', True)
     root.state('iconic')
-    geometry = root.winfo_geometry()
+    w = root.winfo_width()
+    h = root.winfo_height()
     root.destroy()
-    w, geometry = geometry.split('x')
-    h = geometry.split('+')[0]
-    return (int(w), int(h))
+    return (w, h)
 
 
 def get_icon_button(icon, key=None, button_type=None, file_types=None,
@@ -140,7 +139,7 @@ class PyHSI:
     def __init__(self, debug=False):
         self.debug = debug
         self.default_folder = os.environ['HOME']
-        sg.set_options(font=("latin modern sans", 14))
+        sg.set_options(font=("latin modern sans", 12))
         self.xy_expand_elements = []
         self.x_expand_elements = []
         screen_size = get_screen_size()
@@ -153,11 +152,11 @@ class PyHSI:
         menubar = sg.Menu([["&File", [MENU_QUIT]]])
         content = [
             [
-                sg.Column(self.capture_control_panel(), expand_y=True),
-                sg.Column(self.preview_panel(), expand_y=True)
+                sg.Column(self.capture_control_panel(), expand_y=True, expand_x=True),
+                sg.Column(self.preview_panel(), expand_y=True, expand_x=True)
             ]
         ]
-        console = sg.Multiline(size=(80, 5), key=CONSOLE_OUTPUT, disabled=True)
+        console = sg.Multiline(size=(20, 4), key=CONSOLE_OUTPUT, disabled=True)
         self.x_expand_elements.append(console)
         self.camera = None
         self.camera_type = None
@@ -173,6 +172,7 @@ class PyHSI:
             layout=[[menubar], [content], [console]],
             enable_close_attempted_event=True,
             resizable=True,
+            size=(99999, 99999),
             finalize=True
         )
         for e in self.xy_expand_elements:
@@ -198,7 +198,7 @@ class PyHSI:
 
     def capture_control_panel(self):
         label_size = (12, 1)
-        label_pad = (5, 8)
+        label_pad = (3, 0)
         cameras = [CAMERA_TYPE_BASLER, CAMERA_TYPE_MOCK]
         stages = [STAGE_TYPE_TSA200, STAGE_TYPE_MOCK]
         self.ports = list_ports.comports()
@@ -357,8 +357,8 @@ class PyHSI:
         return [[camera_frame], [stage_frame], [preview_frame], [output_frame]]
 
     def preview_panel(self):
-        frame = sg.Frame("Preview", [[
-            sg.Image(size=self.view_canvas_size, key=PREVIEW_CANVAS)
+        frame = sg.Frame("", [[
+            sg.Image(size=self.view_canvas_size, key=PREVIEW_CANVAS) 
         ]])
         self.xy_expand_elements.append(frame)
         return [[frame]]
