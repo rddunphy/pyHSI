@@ -425,8 +425,8 @@ class PyHSI:
             ],
             [
                 get_icon_button(ICON_CAMERA, key=CAPTURE_IMAGE_BTN, tooltip="Capture image and save"),
-                get_icon_button(ICON_STOP, key=STOP_CAPTURE_BTN, tooltip="Stop image capture", disabled=True),
                 get_icon_button(ICON_RESET, key=RESET_STAGE_BTN, tooltip="Reset stage to minimum"),
+                get_icon_button(ICON_STOP, key=STOP_CAPTURE_BTN, tooltip="Stop image capture", disabled=True),
                 sg.pin(sg.ProgressBar(1.0, size=(20, 15), pad=(5, 0), visible=False, key=CAPTURE_IMAGE_PROGRESS))
             ]
         ])
@@ -576,7 +576,7 @@ class PyHSI:
         elif event == STOP_CAPTURE_BTN:
             self.stop_capture(values)
         elif event == RESET_STAGE_BTN:
-            self.reset_stage()
+            self.reset_stage(values)
         elif event == CAPTURE_THREAD_DONE:
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
             self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
@@ -888,17 +888,18 @@ class PyHSI:
         self.capture_thread = InterruptableThread(target=self.capture_image_thread, args=(values,))
         self.capture_thread.start()
 
-    def reset_stage(self):
-        logging.info("Resetting stage")
-        self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
-        self.window[RESET_STAGE_BTN].update(disabled=True)
-        self.capture_thread = InterruptableThread(target=self.reset_stage_thread)
+    def reset_stage(self, values):
+        self.capture_thread = InterruptableThread(target=self.reset_stage_thread, args=(values,))
         self.capture_thread.start()
 
-    def reset_stage_thread(self):
+    def reset_stage_thread(self, values):
         try:
-            if self.stage is None:
-                self.setup_stage()
+            if self.stage is None and not self.setup_stage(values):
+                return
+            logging.info("Resetting stage")
+            self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
+            self.window[STOP_CAPTURE_BTN].update(disabled=False)
+            self.window[RESET_STAGE_BTN].update(disabled=True)
             self.stage.reset()
         except Exception as e:
             logging.error(f"Unable to reset stage: {e}")
