@@ -1,6 +1,7 @@
 from datetime import datetime
 import json
 from json.decoder import JSONDecodeError
+import logging
 import os
 import sys
 import threading
@@ -19,16 +20,6 @@ from .cameras import BaslerCamera, MockCamera
 from .stages import TSA200, MockStage
 from .utils import get_rgb_bands, add_wavelength_labels
 
-DEBUG = 0
-INFO = 1
-WARN = 2
-ERROR = 3
-LOG_COLOURS = {
-    DEBUG: "grey",
-    INFO: "black",
-    WARN: "orange",
-    ERROR: "red"
-}
 MENU_SAVE_CONFIG = "Save configuration as..."
 MENU_LOAD_CONFIG = "Load configuration..."
 MENU_QUIT = "Quit"
@@ -112,6 +103,29 @@ CONFIG_KEYS = (
 CONFIG_COMPAT_VERSIONS = ("0.2.0")
 DEFAULT_CONFIG_PATH = os.path.abspath("default_config.phc")
 
+LOG_COLOURS = {
+    "DEBUG": "grey",
+    "INFO": "black",
+    "WARN": "orange",
+    "ERROR": "red",
+    "CRITICAL": "red"
+}
+LOG_FILE_PATH = os.path.abspath("pyhsi.log")
+
+
+class LoggingHandler(logging.StreamHandler):
+
+    def __init__(self, window):
+        logging.StreamHandler.__init__(self)
+        self.window = window
+
+    def emit(self, record):
+        level = record.levelname
+        line = f'[{record.asctime}] {level}: {record.message}'
+        if self.window[CONSOLE_OUTPUT].get().strip():
+            line = '\n' + line
+        sg.cprint(line, text_color=LOG_COLOURS[level], end='')
+
 
 def get_band_slider(key):
     return sg.Slider(
@@ -167,8 +181,6 @@ class PyHSI:
         self.live_preview_rotation = 1
         self.waterfall_frame = None
         self.live_preview_frame = None
-        # self.view_canvas_size = (round(screen_size[0] * 0.6),
-        #                          round(screen_size[1] * 0.7))
         menubar = sg.Menu([
             ["&File", [MENU_SAVE_CONFIG, MENU_LOAD_CONFIG, MENU_QUIT]]
         ])
@@ -202,26 +214,24 @@ class PyHSI:
         for e in self.x_expand_elements:
             e.expand(expand_x=True, expand_y=False, expand_row=False)
         sg.cprint_set_output_destination(self.window, CONSOLE_OUTPUT)
-        self.log(f"Starting PyHSI v{__version__}")
-        self.log(f"Screen size: {screen_size}", level=DEBUG)
-        self.log(f"Window size: {self.window.size}", level=DEBUG)
+        logging.basicConfig(
+                level=logging.DEBUG if debug else logging.INFO,
+                format='[%(asctime)s] %(levelname)s: %(message)s',
+                filename=LOG_FILE_PATH,
+                datefmt='%H:%M:%S',
+                filemode='w')
+
+        handler = LoggingHandler(self.window)
+        logging.getLogger('').addHandler(handler)
+        logging.captureWarnings(True)
+
+        logging.info(f"Starting PyHSI v{__version__}")
+        logging.debug(f"Screen size: {screen_size}")
+        logging.debug(f"Window size: {self.window.size}")
         if os.path.isfile(DEFAULT_CONFIG_PATH):
             self.load_config(config_file=DEFAULT_CONFIG_PATH)
         else:
-            self.log(f"No default configuration file at {DEFAULT_CONFIG_PATH}", WARN)
-
-    def log(self, message, level=INFO):
-        if self.debug or level > DEBUG:
-            ts = datetime.now().strftime("%H:%M:%S")
-            ls = ["DEBUG", "INFO", "WARN", "ERROR"][level]
-            entry = f"[{ts}] {ls}: {message}"
-            if self.window[CONSOLE_OUTPUT].get().strip():
-                cpentry = '\n' + entry
-            else:
-                cpentry = entry
-            sg.cprint(cpentry, text_color=LOG_COLOURS[level], end='')
-            if self.debug:
-                print(entry)
+            logging.warn(f"No default configuration file at {DEFAULT_CONFIG_PATH}")
 
     def capture_control_panel(self):
         label_size = (12, 1)
@@ -415,7 +425,7 @@ class PyHSI:
 
     def reload_stage_ports(self):
         self.ports = list_ports.comports()
-        self.log(f"Found {len(self.ports)} available serial ports.")
+        logging.info(f"Found {len(self.ports)} available serial port(s).")
         if len(self.ports) > 0:
             ports = [port_label(p) for p in self.ports]
         else:
@@ -496,8 +506,8 @@ class PyHSI:
             self.window[CAMERA_REAL_CONTROL_PANE].update(visible=True)
         try:
             self.setup_camera(values)
-        except Exception:
-            pass
+        except Exception as e:
+            logging.error(e)
         self.update_gain_label(values)
         self.update_preview_slider_ranges(values)
         pc_disabled = not values[PREVIEW_WATERFALL_CB]
@@ -512,7 +522,7 @@ class PyHSI:
             self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
 
     def handle_event(self, event, values):
-        self.log(f"Handling {event} event", level=DEBUG)
+        logging.debug(f"Handling {event} event")
         if event in (EXP_INPUT, VELOCITY_INPUT,
                        RANGE_START_INPUT, RANGE_END_INPUT):
             self.validate(event)
@@ -581,15 +591,15 @@ class PyHSI:
             initialdir=self.default_folder, 
             parent=self.window.TKroot
         )
-        if config_file is None or config_file == "":
+        if config_file == () or config_file == "":
             # User pressed cancel
             return
         try:
             with open(config_file, 'w') as f:
                 f.write(json.dumps(config, indent=4) + "\n")
-                self.log(f"Saved current configuration to {config_file}")
+                logging.info(f"Saved current configuration to {config_file}")
         except IOError as e:
-            self.log(f"Unable to write config file: {e}", ERROR)
+            logging.error(f"Unable to write config file: {e}")
 
     def load_config(self, config_file=None):
         if config_file is None:
@@ -597,7 +607,7 @@ class PyHSI:
                 filetypes=(("PyHSI config", "*.phc"),),
                 initialdir=self.default_folder,
                 parent=self.window.TKroot)
-        if config_file is None or config_file == "":
+        if config_file == () or config_file == "":
             # User pressed cancel
             return
         try:
@@ -609,10 +619,10 @@ class PyHSI:
                 for key in CONFIG_KEYS:
                     if key in config:
                         self.window[key].update(value=config[key])
-                self.log(f"Loaded configuration from {config_file}")
+                logging.info(f"Loaded configuration from {config_file}")
                 self.update_view()
         except (IOError, JSONDecodeError) as e:
-            self.log(f"Unable to read config file: {e}", ERROR)
+            logging.error(f"Unable to read config file: {e}")
 
     def confirm_popup(self, title, text):
         popup = sg.Window(
@@ -641,7 +651,7 @@ class PyHSI:
             if not self.confirm_popup("Confirm exit", msg):
                 return
             self.stop_live_preview()
-        self.log("Exiting PyHSI", level=DEBUG)
+        logging.debug("Exiting PyHSI")
         self.window.close()
         sys.exit()
 
@@ -665,16 +675,14 @@ class PyHSI:
                         if pstr == port_label(p):
                             port = p
                     if port is None:
-                        self.log(f"No serial port for stage '{stage_type}'",
-                                 level=ERROR)
+                        logging.error(f"No serial port for stage '{stage_type}'")
                         return False
                     self.stage = TSA200(port=serial.Serial(port.device))
                 else:
                     self.stage = MockStage()
                 self.stage_type = stage_type
         except Exception as e:
-            self.log(f"Unable to connect to stage '{stage_type}': {e}",
-                     level=ERROR)
+            logging.error(f"Unable to connect to stage '{stage_type}': {e}")
             return False
         return True
 
@@ -733,7 +741,7 @@ class PyHSI:
 
     def start_live_preview(self, values):
         try:
-            self.log("Starting live preview", level=DEBUG)
+            logging.debug("Starting live preview")
             self.setup_camera(values)
             self.live_preview_active = True
             self.next_live_preview_frame(values)
@@ -743,10 +751,10 @@ class PyHSI:
             self.window[PREVIEW_ROTLEFT_BTN].update(disabled=False)
             self.window[PREVIEW_ROTRIGHT_BTN].update(disabled=False)
         except Exception as e:
-            self.log(f"Unable to start preview: {e}", level=ERROR)
+            logging.error(f"Unable to start preview: {e}")
 
     def stop_live_preview(self):
-        self.log("Stopping live preview", level=DEBUG)
+        logging.debug("Stopping live preview")
         icon_path = os.path.join(ICON_DIR, ICON_PLAY + ".png")
         self.window[PREVIEW_BTN].update(image_filename=icon_path)
         self.live_preview_active = False
@@ -773,7 +781,7 @@ class PyHSI:
             frame = self.camera.get_frame(flip=flip, highlight=hl)
             frame = np.asarray(frame * 255, dtype="uint8")
         except Exception as e:
-            self.log(f"Unable to connect to camera: {e}", level=ERROR)
+            logging.error(f"Unable to connect to camera: {e}")
             self.stop_live_preview()
             return
         if self.waterfall_frame is None or self.waterfall_frame.shape[0] != frame.shape[0]:
@@ -843,19 +851,19 @@ class PyHSI:
             if not self.setup_stage(values):
                 return
             vals = self.parse_values(values)
-            self.log("Starting image capture")
-            self.log(str(vals), DEBUG)
+            logging.info("Starting image capture")
+            logging.debug(str(vals))
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=True)
             [img, md] = self.camera.capture_save(
                 vals['file_name'], self.stage, vals['ranges'],
-                vals['velocity'], flip=vals['flip'], verbose=False,
+                vals['velocity'], flip=vals['flip'], verbose=True,
                 description=values[IMAGE_DESCRIPTION_INPUT],
                 progress_callback=self.capture_image_progress_callback)
             self.show_captured_preview(img / self.camera.ref_scale_factor,
                                        md['wavelength'])
         except Exception as e:
-            self.log(f"Unable to capture image: {e}", level=ERROR)
+            logging.error(f"Unable to capture image: {e}")
         finally:
             self.window.write_event_value(CAPTURE_THREAD_DONE, '')
 

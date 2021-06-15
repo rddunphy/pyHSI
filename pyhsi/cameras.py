@@ -8,6 +8,7 @@ Usage example:
 """
 
 from datetime import datetime
+import logging
 import os
 from time import sleep
 import timeit
@@ -136,7 +137,7 @@ class BaslerCamera:
         Kwargs:
             velocity: stage velocity (in mm/s)
             flip: flip order of columns in each frame
-            verbose: print progress messages
+            verbose: log progress messages
         """
         acq_time = datetime.now()
         if not isinstance(ranges[0], tuple) and not isinstance(ranges[0], list):
@@ -170,7 +171,7 @@ class BaslerCamera:
                 else:
                     overwrite = True
         if verbose:
-            print(f"Image saved as {file_name}.")
+            logging.info(f"Image saved as {file_name}.")
         return data, md
 
     def capture(self, stage, ranges, velocity=None, flip=False, verbose=True):
@@ -184,7 +185,7 @@ class BaslerCamera:
         Kwargs:
             velocity: stage velocity (in mm/s)
             flip: flip order of columns in each frame
-            verbose: print progress messages
+            verbose: log progress messages
         """
         # TODO: Look into https://docs.baslerweb.com/overlapping-image-acquisition
         # TODO: 8-bit mode
@@ -203,10 +204,10 @@ class BaslerCamera:
                 for r in ranges:
                     d += abs(r[0] - r[1])
                 t = round(d / velocity)
-                print(f"Imaging {d} mm at {velocity} mm/s (≈{t} s)")
+                logging.info(f"Imaging {d} mm at {velocity} mm/s (≈{t} s)")
                 now = datetime.now().strftime("%H:%M:%S")
-                print(f"Starting image capture at {now}...")
-                print("Positioning stage...")
+                logging.info(f"Starting image capture at {now}...")
+                logging.info("Positioning stage...")
             for r in ranges:
                 start = r[0]
                 stop = r[1]
@@ -221,7 +222,7 @@ class BaslerCamera:
                         frames.append(grab.Array)
                         n_frames += 1
                     else:
-                        print("Error: ", grab.ErrorCode, grab.ErrorDescription)
+                        logging.error(f"{grab.ErrorCode} - {grab.ErrorDescription}")
                     grab.Release()
                 capture_time += timeit.default_timer() - range_start_time
                 self.device.StopGrabbing()
@@ -230,8 +231,8 @@ class BaslerCamera:
             self.device.StopGrabbing()
             self.device.Close()
         if verbose:
-            print(f"Total time {total_time:.2f} s")
-            print((f"{n_frames} frames captured in {capture_time:.2f} s "
+            logging.info(f"Total time {total_time:.2f} s")
+            logging.info((f"{n_frames} frames captured in {capture_time:.2f} s "
                    f"({n_frames/capture_time:.2f} fps)"))
         data = np.rot90(np.array(frames, dtype=np.uint16), axes=(1, 2))
         if flip:
@@ -322,6 +323,7 @@ class MockCamera:
 
     def set_result_image(self, file_name):
         if self._result_image_file_name != file_name:
+            logging.debug(f"Setting result image for mock camera to {file_name}")
             self._result_image_file_name = file_name
             img = envi.open(file_name)
             self.result_image = img.asarray()
@@ -329,6 +331,8 @@ class MockCamera:
             self.nbands = img.nbands
             self.wl = img.bands.centers
             self._current_frame = 0
+        else:
+            logging.debug(f"Result image hasn't changed")
 
     def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
                      verbose=True, overwrite=False, description="",
@@ -361,7 +365,7 @@ class MockCamera:
         Kwargs:
             velocity: stage velocity (in mm/s)
             flip: flip order of columns in each frame
-            verbose: print progress messages
+            verbose: log progress messages
         """
         acq_time = datetime.now()
         if not isinstance(ranges[0], tuple) and not isinstance(ranges[0], list):
@@ -395,7 +399,7 @@ class MockCamera:
                 else:
                     overwrite = True
         if verbose:
-            print(f"Image saved as {file_name}.")
+            logging.info(f"Image saved as {file_name}.")
         return data, md
 
     def capture(self, stage, ranges, velocity=None, flip=False, verbose=True,
@@ -410,7 +414,7 @@ class MockCamera:
         Kwargs:
             velocity: stage velocity (in mm/s)
             flip: flip order of columns in each frame
-            verbose: print progress messages
+            verbose: log progress messages
             progress_callback: callback function which will periodically called
                 with progress in range 0.0 to 1.0
         """

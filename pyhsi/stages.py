@@ -11,6 +11,7 @@ Usage example:
     stage.reset()
 """
 
+import logging
 import serial
 from serial.serialutil import SerialException
 from serial.tools import list_ports
@@ -151,7 +152,7 @@ class TSA200:
             self.wait_while_moving()
 
     def move_to_timed(self, target, velocity=None):
-        """Move the stage to the target position and print timing information.
+        """Move the stage to the target position and log timing information.
 
         Args:
             target: target position in mm
@@ -164,14 +165,14 @@ class TSA200:
         """
         if not velocity:
             velocity = self._v
-        print(f"Moving to {target} mm at velocity {velocity} mm/s...")
+        logging.info(f"Moving to {target} mm at velocity {velocity} mm/s...")
         # TODO
         # d = abs(target - self.get_position())
         # print(f"Distance {d} mm, should take {d/velocity:.2f} s")
         start = timeit.default_timer()
         self.move_to(target, velocity=velocity, block=True)
         time_taken = timeit.default_timer() - start
-        print(f"Move completed in {time_taken:.2f} seconds.")
+        logging.info(f"Move completed in {time_taken:.2f} seconds.")
 
 
 class MockStage:
