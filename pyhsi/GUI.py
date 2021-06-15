@@ -87,6 +87,7 @@ CAPTURE_THREAD_DONE = "CaptureThreadDone"
 CAPTURE_THREAD_PROGRESS = "CaputureThreadProgress"
 CONSOLE_OUTPUT = "ConsoleOutput"
 PREVIEW_CANVAS = "PreviewCanvas"
+PREVIEW_FRAME = "PreviewFrame"
 
 ICON_DIR = "icons"
 ICON_APP = "pyhsi"
@@ -109,7 +110,7 @@ CONFIG_KEYS = (
     IMAGE_DESCRIPTION_INPUT
 )
 CONFIG_COMPAT_VERSIONS = ("0.2.0")
-DEFAULT_CONFIG_PATH = "default_config.phc"
+DEFAULT_CONFIG_PATH = os.path.abspath("default_config.phc")
 
 
 def get_band_slider(key):
@@ -206,6 +207,8 @@ class PyHSI:
         self.log(f"Window size: {self.window.size}", level=DEBUG)
         if os.path.isfile(DEFAULT_CONFIG_PATH):
             self.load_config(config_file=DEFAULT_CONFIG_PATH)
+        else:
+            self.log(f"No default configuration file at {DEFAULT_CONFIG_PATH}", WARN)
 
     def log(self, message, level=INFO):
         if self.debug or level > DEBUG:
@@ -395,7 +398,7 @@ class PyHSI:
     def preview_panel(self):
         frame = sg.Frame("", [[
             sg.Image(size=(9999, 10), key=PREVIEW_CANVAS) 
-        ]], key="preview-frame")
+        ]], key=PREVIEW_FRAME)
         self.xy_expand_elements.append(frame)
         return [[frame]]
 
@@ -594,8 +597,6 @@ class PyHSI:
                 filetypes=(("PyHSI config", "*.phc"),),
                 initialdir=self.default_folder,
                 parent=self.window.TKroot)
-        else:
-            config_file = os.path.abspath(config_file)
         if config_file is None or config_file == "":
             # User pressed cancel
             return
@@ -808,7 +809,7 @@ class PyHSI:
         self.window[PREVIEW_CANVAS].update(data=frame)
 
     def resize_frame_to_canvas(self, frame, preserve_aspect_ratio=True, interpolation=False):
-        (max_w, max_h) = self.window["preview-frame"].get_size()
+        (max_w, max_h) = self.window[PREVIEW_FRAME].get_size()
         max_w = max(max_w - 20, 20)
         max_h = max(max_h - 20, 20)
         if preserve_aspect_ratio:
