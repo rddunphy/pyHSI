@@ -543,6 +543,7 @@ class PyHSI:
         elif event == CAPTURE_THREAD_DONE:
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
             self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
+            self.window[PREVIEW_BTN].update(disabled=False)
         elif event == CAPTURE_THREAD_PROGRESS:
             self.window[CAPTURE_IMAGE_PROGRESS].update(values[CAPTURE_THREAD_PROGRESS])
         elif event == PREVIEW_BTN:
@@ -854,6 +855,7 @@ class PyHSI:
             logging.info("Starting image capture")
             logging.debug(str(vals))
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
+            self.window[PREVIEW_BTN].update(disabled=True)
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=True)
             [img, md] = self.camera.capture_save(
                 vals['file_name'], self.stage, vals['ranges'],
