@@ -28,7 +28,6 @@ LOG_COLOURS = {
     WARN: "orange",
     ERROR: "red"
 }
-INIT_EVENT = "Init"
 MENU_SAVE_CONFIG = "Save configuration as..."
 MENU_LOAD_CONFIG = "Load configuration..."
 MENU_QUIT = "Quit"
@@ -423,7 +422,7 @@ class PyHSI:
 
     def update_gain_label(self, values):
         gain = self.parse_numeric(values[GAIN_INPUT], int, 0, 500, GAIN_FDB)
-        if gain is None:
+        if gain is None or self.camera is None:
             return
         gain_db = gain * self.camera.raw_gain_factor
         self.window[GAIN_DB_LBL].update(value=f"({gain_db:.2f} dB)")
@@ -488,7 +487,10 @@ class PyHSI:
         else:
             self.window[CAMERA_MOCK_CONTROL_PANE].update(visible=False)
             self.window[CAMERA_REAL_CONTROL_PANE].update(visible=True)
-        self.setup_camera(values)
+        try:
+            self.setup_camera(values)
+        except Exception:
+            pass
         self.update_gain_label(values)
         self.update_preview_slider_ranges(values)
         pc_disabled = not values[PREVIEW_WATERFALL_CB]
@@ -504,13 +506,9 @@ class PyHSI:
 
     def handle_event(self, event, values):
         self.log(f"Handling {event} event", level=DEBUG)
-        if event == INIT_EVENT:
-            self.update_view(values)
-        elif event in (EXP_INPUT, VELOCITY_INPUT,
+        if event in (EXP_INPUT, VELOCITY_INPUT,
                        RANGE_START_INPUT, RANGE_END_INPUT):
             self.validate(event)
-        elif event == CAMERA_TYPE_SEL:
-            self.update_view(values)
         elif event == GAIN_INPUT:
             self.update_gain_label(values)
         elif event == BINNING_SEL:
@@ -543,7 +541,7 @@ class PyHSI:
             self.update_preview_slider_labels(values)
         elif event == PREVIEW_CLEAR_BTN:
             self.clear_preview()
-        elif event == PREVIEW_WATERFALL_CB or event == PREVIEW_PSEUDOCOLOUR_CB:
+        elif event in (PREVIEW_WATERFALL_CB, PREVIEW_PSEUDOCOLOUR_CB, CAMERA_TYPE_SEL):
             self.update_view(values)
         elif event == PREVIEW_INTERP_CB:
             if not self.live_preview_active:
@@ -638,14 +636,14 @@ class PyHSI:
         sys.exit()
 
     def run(self):
-        _, values = self.window.read(timeout=0)
-        event = INIT_EVENT
         while True:
+            # TODO: At the moment this uses 100% CPU - only need to keep
+            # polling for live preview
+            event, values = self.window.read(timeout=0)
             if event != '__TIMEOUT__':
                 self.handle_event(event, values)
             elif self.live_preview_active:
                 self.next_live_preview_frame(values)
-            event, values = self.window.read(timeout=0)
 
     def setup_stage(self, values):
         try:
@@ -684,18 +682,8 @@ class PyHSI:
         self.camera.set_raw_gain(vals['gain'])
         self.camera.set_binning(vals['binning'])
         if self.camera_type == CAMERA_TYPE_MOCK:
-            file_name = values[CAMERA_MOCK_FILE]
-            try:
-                self.camera.set_result_image(file_name)
-            except FileNotFoundError:
-                if not file_name.strip():
-                    self.log("No source file for mock camera", level=ERROR)
-                else:
-                    self.log(f"No file named {file_name}", level=ERROR)
-                return
-            except envi.EnviDataFileNotFoundError:
-                self.log(f"Unable to find data file for {file_name}", level=ERROR)
-                return
+            file_name = values[CAMERA_MOCK_FILE].strip()
+            self.camera.set_result_image(file_name)
 
     def parse_numeric(self, input_, type_, min_, max_, fdb_key):
         try:
@@ -735,15 +723,18 @@ class PyHSI:
         return values
 
     def start_live_preview(self, values):
-        self.log("Starting live preview", level=DEBUG)
-        self.setup_camera(values)
-        self.live_preview_active = True
-        self.next_live_preview_frame(values)
-        icon_path = os.path.join(ICON_DIR, ICON_PAUSE + ".png")
-        self.window[PREVIEW_BTN].update(image_filename=icon_path)
-        self.window[PREVIEW_CLEAR_BTN].update(disabled=False)
-        self.window[PREVIEW_ROTLEFT_BTN].update(disabled=False)
-        self.window[PREVIEW_ROTRIGHT_BTN].update(disabled=False)
+        try:
+            self.log("Starting live preview", level=DEBUG)
+            self.setup_camera(values)
+            self.live_preview_active = True
+            self.next_live_preview_frame(values)
+            icon_path = os.path.join(ICON_DIR, ICON_PAUSE + ".png")
+            self.window[PREVIEW_BTN].update(image_filename=icon_path)
+            self.window[PREVIEW_CLEAR_BTN].update(disabled=False)
+            self.window[PREVIEW_ROTLEFT_BTN].update(disabled=False)
+            self.window[PREVIEW_ROTRIGHT_BTN].update(disabled=False)
+        except Exception as e:
+            self.log(f"Unable to start preview: {e}", level=ERROR)
 
     def stop_live_preview(self):
         self.log("Stopping live preview", level=DEBUG)
