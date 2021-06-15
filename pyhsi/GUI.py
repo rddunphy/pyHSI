@@ -62,6 +62,7 @@ FORMAT_ENVI = "ENVI"
 REVERSE_COLUMNS_CB = "FlipOutputCheckbox"
 OUTPUT_FOLDER = "OutputFolder"
 SAVE_FILE = "SaveFileName"
+IMAGE_DESCRIPTION_INPUT = "ImageDescriptionMultiline"
 CAPTURE_IMAGE_BTN = "CaptureImage"
 PREVIEW_BTN = "CameraPreview"
 PREVIEW_CLEAR_BTN = "PreviewClearButton"
@@ -102,7 +103,8 @@ CONFIG_KEYS = (
     VELOCITY_INPUT, PREVIEW_WATERFALL_CB, PREVIEW_PSEUDOCOLOUR_CB,
     PREVIEW_SINGLE_BAND_SLIDER, PREVIEW_RED_BAND_SLIDER,
     PREVIEW_GREEN_BAND_SLIDER, PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB,
-    PREVIEW_INTERP_CB, OUTPUT_FORMAT_SEL, OUTPUT_FOLDER, SAVE_FILE
+    PREVIEW_INTERP_CB, OUTPUT_FORMAT_SEL, OUTPUT_FOLDER, SAVE_FILE,
+    IMAGE_DESCRIPTION_INPUT
 )
 CONFIG_COMPAT_VERSIONS = ("0.2.0")
 DEFAULT_CONFIG_PATH = "default_config.phc"
@@ -359,6 +361,7 @@ class PyHSI:
         ])
         formats = [FORMAT_ENVI]
         file_names = ["{date}_{n}", "{date}_dark_ref"]
+        desc_ml = sg.Multiline("", size=(20, 3), key=IMAGE_DESCRIPTION_INPUT)
         output_frame = sg.Frame("Output", [
             [
                 sg.Text("Format", size=label_size, pad=label_pad),
@@ -374,12 +377,16 @@ class PyHSI:
                 sg.Combo(file_names, default_value=file_names[0], key=SAVE_FILE)
             ],
             [
+                sg.Text("Description", size=label_size, pad=label_pad),
+                desc_ml
+            ],
+            [
                 get_icon_button(ICON_CAMERA, key=CAPTURE_IMAGE_BTN, tooltip="Capture image and save"),
                 sg.ProgressBar(1.0, size=(30, 50), visible=False, key=CAPTURE_IMAGE_PROGRESS)
             ]
         ])
         self.x_expand_elements.extend(
-            (camera_frame, stage_frame, output_frame, preview_frame))
+            (camera_frame, stage_frame, output_frame, preview_frame, desc_ml))
         return [[camera_frame], [stage_frame], [preview_frame], [output_frame]]
 
     def preview_panel(self):
@@ -676,6 +683,19 @@ class PyHSI:
         self.camera.set_exposure_time(vals['exp'])
         self.camera.set_raw_gain(vals['gain'])
         self.camera.set_binning(vals['binning'])
+        if self.camera_type == CAMERA_TYPE_MOCK:
+            file_name = values[CAMERA_MOCK_FILE]
+            try:
+                self.camera.set_result_image(file_name)
+            except FileNotFoundError:
+                if not file_name.strip():
+                    self.log("No source file for mock camera", level=ERROR)
+                else:
+                    self.log(f"No file named {file_name}", level=ERROR)
+                return
+            except envi.EnviDataFileNotFoundError:
+                self.log(f"Unable to find data file for {file_name}", level=ERROR)
+                return
 
     def parse_numeric(self, input_, type_, min_, max_, fdb_key):
         try:
@@ -717,19 +737,6 @@ class PyHSI:
     def start_live_preview(self, values):
         self.log("Starting live preview", level=DEBUG)
         self.setup_camera(values)
-        if self.camera_type == CAMERA_TYPE_MOCK:
-            file_name = values[CAMERA_MOCK_FILE]
-            try:
-                self.camera.set_result_image(file_name)
-            except FileNotFoundError:
-                if not file_name.strip():
-                    self.log("No source file for mock camera", level=ERROR)
-                else:
-                    self.log(f"No file named {file_name}", level=ERROR)
-                return
-            except envi.EnviDataFileNotFoundError:
-                self.log(f"Unable to find data file for {file_name}", level=ERROR)
-                return
         self.live_preview_active = True
         self.next_live_preview_frame(values)
         icon_path = os.path.join(ICON_DIR, ICON_PAUSE + ".png")
@@ -821,12 +828,15 @@ class PyHSI:
             if not self.setup_stage(values):
                 return
             vals = self.parse_values(values)
+            self.log("Starting image capture")
+            self.log(str(vals), DEBUG)
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=True)
-            [img, md] = self.camera.capture_save(vals['file_name'], self.stage, vals['ranges'],
-                                                 vals['velocity'], flip=vals['flip'],
-                                                 verbose=False)
-            self.show_preview(img / 4095, md['wavelength'])  # TODO: Fix
+            [img, md] = self.camera.capture_save(
+                vals['file_name'], self.stage, vals['ranges'],
+                vals['velocity'], flip=vals['flip'], verbose=False,
+                description=values[IMAGE_DESCRIPTION_INPUT])
+            # self.show_preview(img / 4095, md['wavelength'])  # TODO: Fix
         except Exception as e:
             self.log(f"Unable to capture image: {e}", level=ERROR)
         finally:

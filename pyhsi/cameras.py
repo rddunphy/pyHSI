@@ -106,7 +106,7 @@ class BaslerCamera:
         return img
 
     def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
-                     verbose=True, overwrite=False):
+                     verbose=True, overwrite=False, description=""):
         """Capture a full hypersepectral image.
 
         File name may contain the following fields:
@@ -140,16 +140,18 @@ class BaslerCamera:
         acq_time = datetime.now()
         if not isinstance(ranges[0], tuple) and not isinstance(ranges[0], list):
             ranges = [ranges]
-        data = self.capture(ranges, velocity=velocity, flip=flip,
+        data = self.capture(stage, ranges, velocity=velocity, flip=flip,
                             verbose=verbose)
         start = ranges[0][0]
         stop = ranges[-1][1]
         md = {
             'acquisition time': acq_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
-            'description': "Image captured with Basler piA1600-35gm\n",
             'reflectance scale factor': self.ref_scale_factor,
             'wavelength': self.wl
         }
+        description = description.strip()
+        if description != "":
+            md['description'] = description
         while True:
             file_name = self._process_file_name(file_name, acq_time, start,
                                                 stop, velocity, data.shape)
@@ -325,7 +327,7 @@ class MockCamera:
         self._current_frame = 0
 
     def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
-                     verbose=True, overwrite=False):
+                     verbose=True, overwrite=False, description=""):
         """Capture a full hypersepectral image.
 
         File name may contain the following fields:
@@ -359,16 +361,18 @@ class MockCamera:
         acq_time = datetime.now()
         if not isinstance(ranges[0], tuple) and not isinstance(ranges[0], list):
             ranges = [ranges]
-        data = self.capture(ranges, velocity=velocity, flip=flip,
+        data = self.capture(stage, ranges, velocity=velocity, flip=flip,
                             verbose=verbose)
         start = ranges[0][0]
         stop = ranges[-1][1]
         md = {
             'acquisition time': acq_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
-            'description': "Image captured with Basler piA1600-35gm\n",
             'reflectance scale factor': self.ref_scale_factor,
-            'wavelength': self.wl if self.wl else [x+1 for x in range(self.nbands)]
+            'wavelength': self.wl
         }
+        description = description.strip()
+        if description != "":
+            md['description'] = description
         while True:
             file_name = self._process_file_name(file_name, acq_time, start,
                                                 stop, velocity, data.shape)
