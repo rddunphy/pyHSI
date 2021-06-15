@@ -1,3 +1,4 @@
+import ctypes
 from datetime import datetime
 import json
 from json.decoder import JSONDecodeError
@@ -55,6 +56,8 @@ OUTPUT_FOLDER = "OutputFolder"
 SAVE_FILE = "SaveFileName"
 IMAGE_DESCRIPTION_INPUT = "ImageDescriptionMultiline"
 CAPTURE_IMAGE_BTN = "CaptureImage"
+STOP_CAPTURE_BTN = "StopImageCapture"
+RESET_STAGE_BTN = "ResetStageButton"
 PREVIEW_BTN = "CameraPreview"
 PREVIEW_CLEAR_BTN = "PreviewClearButton"
 PREVIEW_WATERFALL_CB = "PreviewWaterfall"
@@ -90,6 +93,8 @@ ICON_ROT_LEFT = "rotate-left"
 ICON_ROT_RIGHT = "rotate-right"
 ICON_DELETE = "delete"
 ICON_CAMERA = "camera"
+ICON_STOP = "stop"
+ICON_RESET = "reset"
 
 CONFIG_KEYS = (
     CAMERA_TYPE_SEL, CAMERA_MOCK_FILE, EXP_INPUT, BINNING_SEL, GAIN_INPUT,
@@ -125,6 +130,27 @@ class LoggingHandler(logging.StreamHandler):
         if self.window[CONSOLE_OUTPUT].get().strip():
             line = '\n' + line
         sg.cprint(line, text_color=LOG_COLOURS[level], end='')
+
+
+class InterruptableThread(threading.Thread):
+
+    def __init__(self, target=None, args=None):
+        threading.Thread.__init__(self, target=target, args=args, daemon=True)
+
+    def get_id(self):
+        if hasattr(self, '_thread_id'):
+            return self._thread_id
+        for id, thread in threading._active.items():
+            if thread is self:
+                return id
+
+    def interrupt(self):
+        thread_id = self.get_id()
+        logging.debug(f"Interrupting thread {thread_id}")
+        res = ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), ctypes.py_object(SystemExit))
+        if res > 1:
+            ctypes.pythonapi.PyThreadState_SetAsyncExc(ctypes.c_long(thread_id), 0)
+            logging.error("Failed to interrupt capture thread")
 
 
 def get_band_slider(key):
@@ -198,6 +224,7 @@ class PyHSI:
         self.stage_type = None
         self.viewer_file = None
         self.viewer_img = None
+        self.capture_thread = None
         icon_ext = ".ico" if sg.running_windows() else ".png"
         icon_path = os.path.join(ICON_DIR, ICON_APP + icon_ext)
         sg.set_global_icon(icon_path)
@@ -398,6 +425,8 @@ class PyHSI:
             ],
             [
                 get_icon_button(ICON_CAMERA, key=CAPTURE_IMAGE_BTN, tooltip="Capture image and save"),
+                get_icon_button(ICON_STOP, key=STOP_CAPTURE_BTN, tooltip="Stop image capture", disabled=True),
+                get_icon_button(ICON_RESET, key=RESET_STAGE_BTN, tooltip="Reset stage to minimum"),
                 sg.pin(sg.ProgressBar(1.0, size=(20, 15), pad=(5, 0), visible=False, key=CAPTURE_IMAGE_PROGRESS))
             ]
         ])
@@ -544,9 +573,15 @@ class PyHSI:
                 pass
         elif event == CAPTURE_IMAGE_BTN:
             self.capture_image(values)
+        elif event == STOP_CAPTURE_BTN:
+            self.stop_capture(values)
+        elif event == RESET_STAGE_BTN:
+            self.reset_stage()
         elif event == CAPTURE_THREAD_DONE:
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
             self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
+            self.window[STOP_CAPTURE_BTN].update(disabled=True)
+            self.window[RESET_STAGE_BTN].update(disabled=False)
             self.window[PREVIEW_BTN].update(disabled=False)
         elif event == CAPTURE_THREAD_PROGRESS:
             self.window[CAPTURE_IMAGE_PROGRESS].update(values[CAPTURE_THREAD_PROGRESS])
@@ -850,8 +885,34 @@ class PyHSI:
         self.window[PREVIEW_CANVAS].update(data=band)
 
     def capture_image(self, values):
-        threading.Thread(target=self.capture_image_thread, args=(values,),
-                         daemon=True).start()
+        self.capture_thread = InterruptableThread(target=self.capture_image_thread, args=(values,))
+        self.capture_thread.start()
+
+    def reset_stage(self):
+        logging.info("Resetting stage")
+        self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
+        self.window[RESET_STAGE_BTN].update(disabled=True)
+        self.capture_thread = InterruptableThread(target=self.reset_stage_thread)
+        self.capture_thread.start()
+
+    def reset_stage_thread(self):
+        try:
+            if self.stage is None:
+                self.setup_stage()
+            self.stage.reset()
+        except Exception as e:
+            logging.error(f"Unable to reset stage: {e}")
+        finally:
+            self.window.write_event_value(CAPTURE_THREAD_DONE, '')
+
+    def stop_capture(self, values):
+        self.stage.stop()
+        self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
+        self.window[STOP_CAPTURE_BTN].update(disabled=True)
+        self.window[RESET_STAGE_BTN].update(disabled=False)
+        self.window[PREVIEW_BTN].update(disabled=False)
+        self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
+        self.capture_thread.interrupt()
 
     def capture_image_thread(self, values):
         try:
@@ -862,6 +923,8 @@ class PyHSI:
             logging.info("Starting image capture")
             logging.debug(str(vals))
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
+            self.window[STOP_CAPTURE_BTN].update(disabled=False)
+            self.window[RESET_STAGE_BTN].update(disabled=True)
             self.window[PREVIEW_BTN].update(disabled=True)
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=True)
             [img, md] = self.camera.capture_save(

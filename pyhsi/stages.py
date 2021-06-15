@@ -209,6 +209,10 @@ class MockStage:
         """Returns True if the stage is currently moving, False otherwise."""
         return timeit.default_timer() < self._moving_until
 
+    def stop(self):
+        self.moving_until = 0
+        logging.info("Stopping translation stage")
+
     def set_velocity(self, velocity):
         """Set the velocity for subsequent calls to `move_to()`.
 
