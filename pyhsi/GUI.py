@@ -1,5 +1,4 @@
 import ctypes
-from datetime import datetime
 import json
 from json.decoder import JSONDecodeError
 import logging
@@ -12,8 +11,6 @@ import numpy as np
 import PySimpleGUI as sg
 import serial
 from serial.tools import list_ports
-from spectral.io import envi
-from spectral.io.spyfile import FileNotFoundError
 import tkinter as tk
 
 from . import __version__
@@ -183,7 +180,7 @@ def get_icon_button(icon, key=None, button_type=None, file_types=None,
         return sg.Button("", image_filename=icon_path, key=key,
                          disabled=disabled, button_type=button_type,
                          file_types=file_types, target=(sg.ThisRow, -1),
-                         initial_folder=initial_folder, tooltip=tooltip, 
+                         initial_folder=initial_folder, tooltip=tooltip,
                          mouseover_colors=mc)
     return sg.Button("", image_filename=icon_path, key=key, disabled=disabled,
                      tooltip=tooltip, mouseover_colors=mc)
@@ -329,7 +326,7 @@ class PyHSI:
                         default_value=ports[0],
                         disabled=(len(self.ports) == 0),
                         key=STAGE_PORT_SEL,
-                        size=(20,1),
+                        size=(20, 1),
                         readonly=True
                     ),
                     get_icon_button(ICON_RELOAD, key=PORT_RELOAD_BTN, tooltip="Reload port list")
@@ -538,7 +535,7 @@ class PyHSI:
             self.setup_camera(values)
         except ValueError as e:
             # Happens whenever no source file has been selected yet
-            logging.debug("Suppressed ValueError: {e}")
+            logging.debug(f"Suppressed ValueError: {e}")
         except Exception as e:
             logging.error(e)
         self.update_gain_label(values)
@@ -556,8 +553,8 @@ class PyHSI:
 
     def handle_event(self, event, values):
         logging.debug(f"Handling {event} event")
-        if event in (EXP_INPUT, VELOCITY_INPUT,
-                       RANGE_START_INPUT, RANGE_END_INPUT):
+        if event in (EXP_INPUT, VELOCITY_INPUT, RANGE_START_INPUT,
+                     RANGE_END_INPUT):
             self.validate(event)
         elif event == GAIN_INPUT:
             self.update_gain_label(values)
@@ -628,8 +625,8 @@ class PyHSI:
         config["Version"] = __version__
         config_file = tk.filedialog.asksaveasfilename(
             filetypes=(("PyHSI config", "*.phc"),),
-            defaultextension='.phc', 
-            initialdir=self.default_folder, 
+            defaultextension='.phc',
+            initialdir=self.default_folder,
             parent=self.window.TKroot
         )
         if config_file == () or config_file == "":
@@ -656,7 +653,9 @@ class PyHSI:
                 config = json.load(f)
                 v = config["Version"]
                 if v not in CONFIG_COMPAT_VERSIONS:
-                    raise IOError(f"Configuration file version {v} incompatible with PyHSI v{__version__} for {config_file}")
+                    msg = (f"Configuration file version {v} incompatible ",
+                           f"with PyHSI v{__version__} for {config_file}")
+                    raise IOError(msg)
                 for key in CONFIG_KEYS:
                     if key in config:
                         self.window[key].update(value=config[key])
@@ -669,7 +668,7 @@ class PyHSI:
         popup = sg.Window(
             title,
             [[sg.Text(text)],
-             [sg.Button("OK", bind_return_key=True), sg.Button("Cancel")]],
+             [sg.Button("Ok", bind_return_key=True), sg.Button("Cancel")]],
             keep_on_top=True,
             modal=True,
             alpha_channel=0,
@@ -681,7 +680,7 @@ class PyHSI:
         popup.move(wx + ww//2 - pw//2, wy + wh//2 - ph//2)
         popup.set_alpha(1)
         event, _ = popup.read(close=True)
-        return event == "OK" 
+        return event == "Ok"
 
     def exit(self):
         if self.live_preview_active or self.capture_thread is not None:
