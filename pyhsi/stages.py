@@ -183,12 +183,16 @@ class MockStage:
         self.default_velocity = velocity
         self.length = length
         self.max_velocity = max_velocity
-        self._moving_until = False
+        self._moving_until = 0
+        self._moving_v = 0
         self._pos = 0
 
     def get_position(self):
-        # TODO
-        pass
+        if self.is_moving():
+            time_remaining = self._moving_until - timeit.default_timer()
+            return self._pos - (self._moving_v * time_remaining)
+        else:
+            return self._pos
 
     def wait_while_moving(self):
         """Block execution until the stage is no longer moving."""
@@ -202,8 +206,6 @@ class MockStage:
 
     def is_moving(self):
         """Returns True if the stage is currently moving, False otherwise."""
-        if not self._moving_until:
-            return False
         return timeit.default_timer() < self._moving_until
 
     def set_velocity(self, velocity):
@@ -237,10 +239,10 @@ class MockStage:
         if velocity:
             self.set_velocity(velocity)
         sleep_time = abs(self._pos - target) / self._v
+        self._moving_until = timeit.default_timer() + sleep_time
+        self._moving_v = self._v
         if (block):
             time.sleep(sleep_time)
-        else:
-            self._moving_until = timeit.default_timer() + sleep_time
         self._pos = target
         if self._v != old_v:
             self.set_velocity(old_v)

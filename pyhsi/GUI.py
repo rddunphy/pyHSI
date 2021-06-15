@@ -3,6 +3,7 @@ import json
 from json.decoder import JSONDecodeError
 import os
 import sys
+import threading
 
 import cv2
 import numpy as np
@@ -82,6 +83,8 @@ PREVIEW_BLUE_BAND_NM = "PreviewBlueBandNm"
 PREVIEW_SINGLE_BAND_PANE = "PreviewSingleBandPanel"
 PREVIEW_RGB_BAND_PANE = "PreviewRgbBandPanel"
 CAPTURE_IMAGE_PROGRESS = "CaptureImageProgress"
+CAPTURE_THREAD_DONE = "CaptureThreadDone"
+CAPTURE_THREAD_PROGRESS = "CaputureThreadProgress"
 CONSOLE_OUTPUT = "ConsoleOutput"
 PREVIEW_CANVAS = "PreviewCanvas"
 
@@ -163,8 +166,8 @@ class PyHSI:
         self.live_preview_rotation = 1
         self.waterfall_frame = None
         self.live_preview_frame = None
-        self.view_canvas_size = (round(screen_size[0] * 0.6),
-                                 round(screen_size[1] * 0.7))
+        # self.view_canvas_size = (round(screen_size[0] * 0.6),
+        #                          round(screen_size[1] * 0.7))
         menubar = sg.Menu([
             ["&File", [MENU_SAVE_CONFIG, MENU_LOAD_CONFIG, MENU_QUIT]]
         ])
@@ -361,7 +364,7 @@ class PyHSI:
         formats = [FORMAT_ENVI]
         file_names = ["{date}_{n}", "{date}_dark_ref"]
         desc_ml = sg.Multiline("", size=(20, 3), key=IMAGE_DESCRIPTION_INPUT)
-        output_frame = sg.Frame("Output", [
+        output_frame = sg.Frame("Capture and save", [
             [
                 sg.Text("Format", size=label_size, pad=label_pad),
                 sg.Combo(formats, default_value=formats[0], key=OUTPUT_FORMAT_SEL, readonly=True)
@@ -373,7 +376,8 @@ class PyHSI:
             ],
             [
                 sg.Text("File name", size=label_size, pad=label_pad),
-                sg.Combo(file_names, default_value=file_names[0], key=SAVE_FILE)
+                sg.Combo(file_names, default_value=file_names[0], key=SAVE_FILE),
+                sg.Text(".hdr")
             ],
             [
                 sg.Text("Description", size=label_size, pad=label_pad),
@@ -381,7 +385,7 @@ class PyHSI:
             ],
             [
                 get_icon_button(ICON_CAMERA, key=CAPTURE_IMAGE_BTN, tooltip="Capture image and save"),
-                sg.ProgressBar(1.0, size=(30, 50), visible=False, key=CAPTURE_IMAGE_PROGRESS)
+                sg.pin(sg.ProgressBar(1.0, size=(20, 15), pad=(5, 0), visible=False, key=CAPTURE_IMAGE_PROGRESS))
             ]
         ])
         self.x_expand_elements.extend(
@@ -390,8 +394,8 @@ class PyHSI:
 
     def preview_panel(self):
         frame = sg.Frame("", [[
-            sg.Image(size=self.view_canvas_size, key=PREVIEW_CANVAS) 
-        ]])
+            sg.Image(size=(9999, 10), key=PREVIEW_CANVAS) 
+        ]], key="preview-frame")
         self.xy_expand_elements.append(frame)
         return [[frame]]
 
@@ -523,6 +527,11 @@ class PyHSI:
                 pass
         elif event == CAPTURE_IMAGE_BTN:
             self.capture_image(values)
+        elif event == CAPTURE_THREAD_DONE:
+            self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
+            self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
+        elif event == CAPTURE_THREAD_PROGRESS:
+            self.window[CAPTURE_IMAGE_PROGRESS].update(values[CAPTURE_THREAD_PROGRESS])
         elif event == PREVIEW_BTN:
             if self.live_preview_active:
                 self.stop_live_preview()
@@ -761,6 +770,7 @@ class PyHSI:
             hl = False
         try:
             frame = self.camera.get_frame(flip=flip, highlight=hl)
+            frame = np.asarray(frame * 255, dtype="uint8")
         except Exception as e:
             self.log(f"Unable to connect to camera: {e}", level=ERROR)
             self.stop_live_preview()
@@ -790,29 +800,43 @@ class PyHSI:
             self.clear_preview()
             return
         frame = np.rot90(frame, k=self.live_preview_rotation)
-        max_w = self.view_canvas_size[0]
-        max_h = self.view_canvas_size[1]
-        if waterfall:
-            new_w = max_w
-            new_h = max_h
-        else:
-            old_h = frame.shape[0]
-            old_w = frame.shape[1]
-            new_w = round(min(max_w, old_w * max_h / old_h))
-            new_h = round(min(max_h, old_h * max_w / old_w))
-        if interpolation:
-            interp = cv2.INTER_LINEAR
-        else:
-            interp = cv2.INTER_NEAREST
-        frame = cv2.resize(frame, (new_w, new_h), interpolation=interp)
+        frame = self.resize_frame_to_canvas(
+            frame, preserve_aspect_ratio=not waterfall, interpolation=interpolation)
         if not waterfall and self.camera.wl:
             frame = add_wavelength_labels(frame, self.camera.wl, rot=self.live_preview_rotation)
         frame = cv2.imencode('.png', frame)[1].tobytes()
         self.window[PREVIEW_CANVAS].update(data=frame)
 
+    def resize_frame_to_canvas(self, frame, preserve_aspect_ratio=True, interpolation=False):
+        (max_w, max_h) = self.window["preview-frame"].get_size()
+        max_w = max(max_w - 20, 20)
+        max_h = max(max_h - 20, 20)
+        if preserve_aspect_ratio:
+            old_h = frame.shape[0]
+            old_w = frame.shape[1]
+            new_w = round(min(max_w, old_w * max_h / old_h))
+            new_h = round(min(max_h, old_h * max_w / old_w))
+        else:
+            new_w = max_w
+            new_h = max_h
+        if interpolation:
+            interp = cv2.INTER_LINEAR
+        else:
+            interp = cv2.INTER_NEAREST
+        return cv2.resize(frame, (new_w, new_h), interpolation=interp)
+
+    def show_captured_preview(self, img, wl):
+        band = img[:, :, len(wl)//2]
+        band = np.asarray(band * 255, dtype="uint8")
+        band = self.resize_frame_to_canvas(band)
+        band = cv2.imencode('.png', band)[1].tobytes()
+        self.window[PREVIEW_CANVAS].update(data=band)
+
     def capture_image(self, values):
-        # TODO: Concurrency
-        # https://pysimplegui.readthedocs.io/en/latest/cookbook/#recipe-long-operations-multi-threading
+        threading.Thread(target=self.capture_image_thread, args=(values,),
+                         daemon=True).start()
+
+    def capture_image_thread(self, values):
         try:
             self.setup_camera(values)
             if not self.setup_stage(values):
@@ -825,10 +849,14 @@ class PyHSI:
             [img, md] = self.camera.capture_save(
                 vals['file_name'], self.stage, vals['ranges'],
                 vals['velocity'], flip=vals['flip'], verbose=False,
-                description=values[IMAGE_DESCRIPTION_INPUT])
-            # self.show_preview(img / 4095, md['wavelength'])  # TODO: Fix
+                description=values[IMAGE_DESCRIPTION_INPUT],
+                progress_callback=self.capture_image_progress_callback)
+            self.show_captured_preview(img / self.camera.ref_scale_factor,
+                                       md['wavelength'])
         except Exception as e:
             self.log(f"Unable to capture image: {e}", level=ERROR)
         finally:
-            self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
-            self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
+            self.window.write_event_value(CAPTURE_THREAD_DONE, '')
+
+    def capture_image_progress_callback(self, progress):
+        self.window.write_event_value(CAPTURE_THREAD_PROGRESS, progress)

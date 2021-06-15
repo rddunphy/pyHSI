@@ -9,6 +9,7 @@ Usage example:
 
 from datetime import datetime
 import os
+from time import sleep
 import timeit
 
 import numpy as np
@@ -292,6 +293,7 @@ class MockCamera:
         self.binning = binning
         self.mode_12bit = mode_12bit
         self.wl = None
+        self._result_image_file_name = None
         self._current_frame = 0
 
     def set_exposure_time(self, exp):
@@ -319,15 +321,18 @@ class MockCamera:
         return self.raw_gain_factor * self.raw_gain
 
     def set_result_image(self, file_name):
-        img = envi.open(file_name)
-        self.result_image = img.asarray()
-        self.ref_scale_factor = img.scale_factor
-        self.nbands = img.nbands
-        self.wl = img.bands.centers
-        self._current_frame = 0
+        if self._result_image_file_name != file_name:
+            self._result_image_file_name = file_name
+            img = envi.open(file_name)
+            self.result_image = img.asarray()
+            self.ref_scale_factor = img.scale_factor
+            self.nbands = img.nbands
+            self.wl = img.bands.centers
+            self._current_frame = 0
 
     def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
-                     verbose=True, overwrite=False, description=""):
+                     verbose=True, overwrite=False, description="",
+                     progress_callback=None):
         """Capture a full hypersepectral image.
 
         File name may contain the following fields:
@@ -362,7 +367,7 @@ class MockCamera:
         if not isinstance(ranges[0], tuple) and not isinstance(ranges[0], list):
             ranges = [ranges]
         data = self.capture(stage, ranges, velocity=velocity, flip=flip,
-                            verbose=verbose)
+                            verbose=verbose, progress_callback=progress_callback)
         start = ranges[0][0]
         stop = ranges[-1][1]
         md = {
@@ -393,7 +398,8 @@ class MockCamera:
             print(f"Image saved as {file_name}.")
         return data, md
 
-    def capture(self, stage, ranges, velocity=None, flip=False, verbose=True):
+    def capture(self, stage, ranges, velocity=None, flip=False, verbose=True,
+                progress_callback=None):
         """Simulate capturing a full hypersepectral image.
 
         Args:
@@ -405,6 +411,8 @@ class MockCamera:
             velocity: stage velocity (in mm/s)
             flip: flip order of columns in each frame
             verbose: print progress messages
+            progress_callback: callback function which will periodically called
+                with progress in range 0.0 to 1.0
         """
         if not isinstance(ranges[0], tuple):
             ranges = [ranges]
@@ -412,7 +420,11 @@ class MockCamera:
             start = r[0]
             stop = r[1]
             stage.move_to(start, block=True)
-            stage.move_to(stop, velocity=velocity, block=True)
+            stage.move_to(stop, velocity=velocity)
+            while stage.is_moving():
+                sleep(0.1)
+                progress = (stage.get_position() - start) / (stop - start)
+                progress_callback(progress)
         if flip:
             return np.fliplr(self.result_image)
         return self.result_image
@@ -425,7 +437,6 @@ class MockCamera:
             img = np.flipud(img)
         if highlight:
             img = highlight_saturated(img)
-        img = np.asarray(img * 255, dtype="uint8")
         return img
 
     def _process_file_name(self, fn, acq_time, start, stop, vel, shape):
