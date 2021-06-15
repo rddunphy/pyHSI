@@ -376,7 +376,7 @@ class PyHSI:
         ])
         formats = [FORMAT_ENVI]
         file_names = ["{date}_{n}", "{date}_dark_ref"]
-        desc_ml = sg.Multiline("", size=(20, 3), key=IMAGE_DESCRIPTION_INPUT)
+        description_multiline = sg.Multiline(size=(30, 3), key=IMAGE_DESCRIPTION_INPUT)
         output_frame = sg.Frame("Capture and save", [
             [
                 sg.Text("Format", size=label_size, pad=label_pad),
@@ -394,7 +394,7 @@ class PyHSI:
             ],
             [
                 sg.Text("Description", size=label_size, pad=label_pad),
-                desc_ml
+                description_multiline
             ],
             [
                 get_icon_button(ICON_CAMERA, key=CAPTURE_IMAGE_BTN, tooltip="Capture image and save"),
@@ -402,12 +402,13 @@ class PyHSI:
             ]
         ])
         self.x_expand_elements.extend(
-            (camera_frame, stage_frame, output_frame, preview_frame, desc_ml))
+            (camera_frame, stage_frame, output_frame, preview_frame, description_multiline))
         return [[camera_frame], [stage_frame], [preview_frame], [output_frame]]
 
     def preview_panel(self):
         frame = sg.Frame("", [[
-            sg.Image(size=(9999, 10), key=PREVIEW_CANVAS) 
+            sg.Image(key=PREVIEW_CANVAS),
+            sg.Image(size=(9999, 1))  # Hack to make frame expand correctly
         ]], key=PREVIEW_FRAME)
         self.xy_expand_elements.append(frame)
         return [[frame]]
@@ -506,6 +507,9 @@ class PyHSI:
             self.window[CAMERA_REAL_CONTROL_PANE].update(visible=True)
         try:
             self.setup_camera(values)
+        except ValueError as e:
+            # Happens whenever no source file has been selected yet
+            logging.debug("Suppressed ValueError: {e}")
         except Exception as e:
             logging.error(e)
         self.update_gain_label(values)
@@ -701,7 +705,10 @@ class PyHSI:
         self.camera.set_binning(vals['binning'])
         if self.camera_type == CAMERA_TYPE_MOCK:
             file_name = values[CAMERA_MOCK_FILE].strip()
-            self.camera.set_result_image(file_name)
+            if file_name != "":
+                self.camera.set_result_image(file_name)
+            else:
+                raise ValueError("No source image specified for mock camera")
 
     def parse_numeric(self, input_, type_, min_, max_, fdb_key):
         try:
