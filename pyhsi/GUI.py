@@ -637,9 +637,8 @@ class PyHSI:
 
     def run(self):
         while True:
-            # TODO: At the moment this uses 100% CPU - only need to keep
-            # polling for live preview
-            event, values = self.window.read(timeout=0)
+            timeout = 10 if self.live_preview_active else None
+            event, values = self.window.read(timeout=timeout)
             if event != '__TIMEOUT__':
                 self.handle_event(event, values)
             elif self.live_preview_active:
