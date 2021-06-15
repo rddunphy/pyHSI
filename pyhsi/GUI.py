@@ -574,7 +574,7 @@ class PyHSI:
         elif event == CAPTURE_IMAGE_BTN:
             self.capture_image(values)
         elif event == STOP_CAPTURE_BTN:
-            self.stop_capture(values)
+            self.stop_capture()
         elif event == RESET_STAGE_BTN:
             self.reset_stage(values)
         elif event == CAPTURE_THREAD_DONE:
@@ -583,6 +583,7 @@ class PyHSI:
             self.window[STOP_CAPTURE_BTN].update(disabled=True)
             self.window[RESET_STAGE_BTN].update(disabled=False)
             self.window[PREVIEW_BTN].update(disabled=False)
+            self.capture_thread = None
         elif event == CAPTURE_THREAD_PROGRESS:
             self.window[CAPTURE_IMAGE_PROGRESS].update(values[CAPTURE_THREAD_PROGRESS])
         elif event == PREVIEW_BTN:
@@ -683,14 +684,14 @@ class PyHSI:
         return event == "OK" 
 
     def exit(self):
-        # TODO: Cleanup code / check there are no ongoing processes
-        # We don't want to exit in the middle of capturing an image - in this
-        # case probably display a prompt?
-        if self.live_preview_active:
+        if self.live_preview_active or self.capture_thread is not None:
             msg = "Are you sure you want to exit PyHSI?"
             if not self.confirm_popup("Confirm exit", msg):
                 return
-            self.stop_live_preview()
+            if self.live_preview_active:
+                self.stop_live_preview()
+            if self.capture_thread is not None:
+                self.stop_capture()
         logging.debug("Exiting PyHSI")
         self.window.close()
         sys.exit()
@@ -906,7 +907,7 @@ class PyHSI:
         finally:
             self.window.write_event_value(CAPTURE_THREAD_DONE, '')
 
-    def stop_capture(self, values):
+    def stop_capture(self):
         self.stage.stop()
         self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
         self.window[STOP_CAPTURE_BTN].update(disabled=True)
@@ -914,6 +915,7 @@ class PyHSI:
         self.window[PREVIEW_BTN].update(disabled=False)
         self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
         self.capture_thread.interrupt()
+        self.capture_thread = None
 
     def capture_image_thread(self, values):
         try:
