@@ -264,7 +264,7 @@ class PyHSI:
         sg.cprint_set_output_destination(self.window, CONSOLE_OUTPUT)
         logging.basicConfig(
                 level=logging.DEBUG if debug else logging.INFO,
-                format='[%(asctime)s] %(levelname)s: %(message)s',
+                format='[%(asctime)s] %(levelname)-8s (%(pathname)s:%(lineno)d) : %(message)s',
                 filename=LOG_FILE_PATH,
                 datefmt='%H:%M:%S',
                 filemode='w')
@@ -274,8 +274,8 @@ class PyHSI:
         logging.captureWarnings(True)
 
         logging.info(f"Starting PyHSI v{__version__}")
-        logging.debug(f"Screen size: {screen_size}")
-        logging.debug(f"Window size: {self.window.size}")
+        logging.debug(f"Running in debug mode - full log at {LOG_FILE_PATH}")
+        logging.debug(f"Screen size: {screen_size}, window size: {self.window.size}")
         if os.path.isfile(DEFAULT_CONFIG_PATH):
             self.load_config(config_file=DEFAULT_CONFIG_PATH)
         else:
@@ -561,7 +561,7 @@ class PyHSI:
             # Happens whenever no source file has been selected yet
             logging.debug(f"Suppressed ValueError: {e}")
         except Exception as e:
-            logging.error(e)
+            logging.exception(e)
         self.update_gain_label(values)
         self.update_preview_slider_ranges(values)
         pc_disabled = not values[PREVIEW_WATERFALL_CB]
@@ -574,14 +574,19 @@ class PyHSI:
         self.window[PREVIEW_SINGLE_BAND_PANE].update(visible=single_vis)
         if not self.live_preview_active:
             self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
+        if values[STAGE_TYPE_SEL] == STAGE_TYPE_MOCK:
+            self.window[STAGE_PORT_PANE].update(visible=False)
+        else:
+            self.window[STAGE_PORT_PANE].update(visible=True)
 
     def handle_event(self, event, values):
         logging.debug(f"Handling {event} event")
         if event in (EXP_INPUT, VELOCITY_INPUT, RANGE_START_INPUT,
                      RANGE_END_INPUT):
             self.validate(event)
-        elif event == GAIN_INPUT:
-            self.update_gain_label(values)
+        elif event in (PREVIEW_WATERFALL_CB, PREVIEW_PSEUDOCOLOUR_CB,
+                       CAMERA_TYPE_SEL, STAGE_TYPE_SEL, GAIN_INPUT):
+            self.update_view(values)
         elif event == BINNING_SEL:
             self.camera.set_binning(int(values[BINNING_SEL]))
             self.update_preview_slider_ranges(values)
@@ -590,8 +595,9 @@ class PyHSI:
             try:
                 self.camera.set_result_image(file_name)
                 self.update_preview_slider_ranges(values)
-            except Exception:
-                pass
+            except Exception as e:
+                # Invalid source file, but at this stage we don't care
+                logging.debug(f"Suppressed exception: {e}")
         elif event == CAPTURE_IMAGE_BTN:
             self.capture_image(values)
         elif event == STOP_CAPTURE_BTN:
@@ -625,18 +631,11 @@ class PyHSI:
             self.update_preview_slider_labels(values)
         elif event == PREVIEW_CLEAR_BTN:
             self.clear_preview()
-        elif event in (PREVIEW_WATERFALL_CB, PREVIEW_PSEUDOCOLOUR_CB, CAMERA_TYPE_SEL):
-            self.update_view(values)
         elif event == PREVIEW_INTERP_CB:
             if not self.live_preview_active:
                 self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
         elif event == PORT_RELOAD_BTN:
             self.reload_stage_ports()
-        elif event == STAGE_TYPE_SEL:
-            if values[STAGE_TYPE_SEL] == STAGE_TYPE_MOCK:
-                self.window[STAGE_PORT_PANE].update(visible=False)
-            else:
-                self.window[STAGE_PORT_PANE].update(visible=True)
         elif event == MENU_SAVE_CONFIG:
             self.save_config(values)
         elif event == MENU_LOAD_CONFIG:
@@ -661,7 +660,7 @@ class PyHSI:
                 f.write(json.dumps(config, indent=4) + "\n")
                 logging.info(f"Saved current configuration to {config_file}")
         except IOError as e:
-            logging.error(f"Unable to write config file: {e}")
+            logging.exception(f"Unable to write config file: {e}")
 
     def load_config(self, config_file=None):
         if config_file is None:
@@ -686,7 +685,7 @@ class PyHSI:
                 logging.info(f"Loaded configuration from {config_file}")
                 self.update_view()
         except (IOError, JSONDecodeError) as e:
-            logging.error(f"Unable to read config file: {e}")
+            logging.exception(f"Unable to read config file: {e}")
 
     def confirm_popup(self, title, text):
         popup = sg.Window(
@@ -720,18 +719,25 @@ class PyHSI:
         sys.exit()
 
     def run(self):
-        while True:
-            timeout = 10 if self.live_preview_active else None
-            event, values = self.window.read(timeout=timeout)
-            if event != '__TIMEOUT__':
-                self.handle_event(event, values)
-            elif self.live_preview_active:
-                self.next_live_preview_frame(values)
+        try:
+            while True:
+                timeout = 10 if self.live_preview_active else None
+                event, values = self.window.read(timeout=timeout)
+                if event != '__TIMEOUT__':
+                    self.handle_event(event, values)
+                elif self.live_preview_active:
+                    self.next_live_preview_frame(values)
+        except KeyboardInterrupt:
+            logging.error("Received KeyboardInterrupt")
+            raise
+        except Exception:
+            logging.exception("Top level exception")
+            raise
 
     def setup_stage(self, values):
         try:
             stage_type = values[STAGE_TYPE_SEL]
-            if not self.stage or stage_type != self.stage_type:
+            if self.stage is None or stage_type != self.stage_type:
                 if stage_type == STAGE_TYPE_TSA200:
                     pstr = values[STAGE_PORT_SEL]
                     port = None
@@ -746,7 +752,7 @@ class PyHSI:
                     self.stage = MockStage()
                 self.stage_type = stage_type
         except Exception as e:
-            logging.error(f"Unable to connect to stage '{stage_type}': {e}")
+            logging.exception(f"Unable to connect to stage '{stage_type}': {e}")
             return False
         return True
 
@@ -778,7 +784,8 @@ class PyHSI:
                 raise ValueError(f"Maximum value {max_}")
             self.window[fdb_key].update(visible=False)
             return val
-        except ValueError:
+        except ValueError as e:
+            logging.debug(f"ValueError for numeric input: {e}")
             self.window[fdb_key].update(visible=True)
             return None
 
@@ -818,7 +825,7 @@ class PyHSI:
             self.window[PREVIEW_ROTLEFT_BTN].update(disabled=False)
             self.window[PREVIEW_ROTRIGHT_BTN].update(disabled=False)
         except Exception as e:
-            logging.error(f"Unable to start preview: {e}")
+            logging.exception(f"Unable to start preview: {e}")
 
     def stop_live_preview(self):
         logging.debug("Stopping live preview")
@@ -848,7 +855,7 @@ class PyHSI:
             frame = self.camera.get_frame(flip=flip, highlight=hl)
             frame = np.asarray(frame * 255, dtype="uint8")
         except Exception as e:
-            logging.error(f"Unable to connect to camera: {e}")
+            logging.exception(f"Unable to connect to camera: {e}")
             self.stop_live_preview()
             return
         if self.waterfall_frame is None or self.waterfall_frame.shape[0] != frame.shape[0]:
@@ -918,7 +925,7 @@ class PyHSI:
 
     def reset_stage_thread(self, values):
         try:
-            if self.stage is None and not self.setup_stage(values):
+            if not self.setup_stage(values):
                 return
             logging.info("Resetting stage")
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
@@ -926,7 +933,7 @@ class PyHSI:
             self.window[RESET_STAGE_BTN].update(disabled=True)
             self.stage.reset()
         except Exception as e:
-            logging.error(f"Unable to reset stage: {e}")
+            logging.exception(f"Unable to reset stage: {e}")
         finally:
             self.window.write_event_value(CAPTURE_THREAD_DONE, '')
 
@@ -947,7 +954,6 @@ class PyHSI:
                 return
             vals = self.parse_values(values)
             logging.info("Starting image capture")
-            logging.debug(str(vals))
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
             self.window[STOP_CAPTURE_BTN].update(disabled=False)
             self.window[RESET_STAGE_BTN].update(disabled=True)
@@ -977,6 +983,7 @@ class PyHSI:
                 fs = ", ".join(fields.keys())
                 msg = f"{{{e}}} is not a valid field name (choose from {fs})"
                 raise ValueError(msg)
+            logging.debug(f"Capturing image with file_name={file_name} and description={description}")
             [img, md] = self.camera.capture_save(
                 file_name, self.stage, vals['ranges'], vals['velocity'],
                 flip=vals['flip'], verbose=True, description=description,
@@ -984,7 +991,7 @@ class PyHSI:
             self.show_captured_preview(img / self.camera.ref_scale_factor,
                                        md['wavelength'])
         except Exception as e:
-            logging.error(f"Unable to capture image: {e}")
+            logging.exception(f"Unable to capture image: {e}")
         finally:
             self.window.write_event_value(CAPTURE_THREAD_DONE, '')
 
