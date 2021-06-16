@@ -13,12 +13,15 @@ import numpy as np
 import PySimpleGUI as sg
 import serial
 from serial.tools import list_ports
+import spectral
 import tkinter as tk
 
 from . import __version__
 from .cameras import BaslerCamera, MockCamera
 from .stages import TSA200, MockStage
 from .utils import get_rgb_bands, add_wavelength_labels
+
+spectral.settings.envi_support_nonlowercase_params = True
 
 MENU_SAVE_CONFIG = "Save configuration as..."
 MENU_LOAD_CONFIG = "Load configuration..."
@@ -110,7 +113,7 @@ DEFAULT_CONFIG_PATH = os.path.abspath("default_config.phc")
 LOG_COLOURS = {
     "DEBUG": "grey",
     "INFO": "black",
-    "WARN": "orange",
+    "WARNING": "orange",
     "ERROR": "red",
     "CRITICAL": "red"
 }
@@ -953,7 +956,6 @@ class PyHSI:
             acq_time = datetime.now()
             fields = {
                 "model": self.camera.model_name,
-                "bands": len(self.camera.wl),
                 "date": acq_time.strftime("%Y-%m-%d"),
                 "time": acq_time.strftime("%H:%M:%S"),
                 "exp": self.camera.exp,
@@ -965,15 +967,15 @@ class PyHSI:
                 "stop": vals['ranges'][1],
                 "travel": abs(vals['ranges'][0] - vals['ranges'][1]),
                 "vel": vals['velocity'],
-                "version": __version__
+                "version": __version__,
+                "n": 0
             }
             try:
                 file_name = template_to_file_name(values[OUTPUT_FOLDER], values[SAVE_FILE], fields, '.hdr')
                 description = values[IMAGE_DESCRIPTION_INPUT].format(**fields)
             except KeyError as e:
-                msg = (f"{{{e}}} is not a valid field name (choose from "
-                       "model, bands, date, time, exp, bin, gain, raw_gain, "
-                       "mode, start, stop, travel, vel, or version)")
+                fs = ", ".join(fields.keys())
+                msg = f"{{{e}}} is not a valid field name (choose from {fs})"
                 raise ValueError(msg)
             [img, md] = self.camera.capture_save(
                 file_name, self.stage, vals['ranges'], vals['velocity'],

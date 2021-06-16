@@ -9,7 +9,6 @@ Usage example:
 
 from datetime import datetime
 import logging
-import os
 from time import sleep
 import timeit
 
@@ -286,9 +285,12 @@ class MockCamera:
             self.ref_scale_factor = img.scale_factor
             self.nbands = img.nbands
             self.wl = img.bands.centers
+            if self.wl is None:
+                logging.warning(f"No valid wavelength data for {file_name}")
+                self.wl = list(range(self.nbands))
             self._current_frame = 0
         else:
-            logging.debug(f"Result image hasn't changed")
+            logging.debug("Result image hasn't changed")
 
     def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
                      verbose=True, overwrite=False, description="",
