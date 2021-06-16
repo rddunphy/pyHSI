@@ -21,6 +21,127 @@ from .cameras import BaslerCamera, MockCamera
 from .stages import TSA200, MockStage
 from .utils import get_rgb_bands, add_wavelength_labels
 
+CREDITS = f"""PyHSI v{__version__}
+© 2021 R. David Dunphy
+University of Strathclyde"""
+
+HELP_TEXT = r"""=HELP=
+
+==Controls==
+
+Overview of available controls.
+
+===Camera===
+
+Controls related to camera hardware setup:
+
+* Model: Select camera model. Currently only supports the Basler piA1600 VNIR
+  camera. The mock camera allows the behaviour of a camera to be simulated
+  using an existing source file for testing purposes.
+* Exposure time: Sets the exposure time of the camera in ms.
+* Binning: Sets the pixel binning of the camera in both axes.
+* Gain: Sets the camera's raw gain value. Actual gain in dB is displayed to
+  the right.
+* Reverse order of columns: If checked, each frame will be mirrored
+  horizontally. Useful if the orientation of the camera is changed.
+
+===Stage===
+
+Controls related to stage hardware setup:
+
+* Model: Select stage model. Currently only supports Zolix TSA200 stage with
+  Schneider motor controller. The mock stage allows the behaviour of the TSA200
+  to be simulated for testing purposes.
+* Port: Serial port to use for translation stage. Should show up as name of
+  serial adapter (USB2Serial 1xRS422/485) once the stage is connected and
+  refresh button has been pressed.
+* Capture range: Start and end positions of stage in mm to be imaged.
+* Velocity: Stage imaging velocity in mm/s.
+
+===Live preview===
+
+Controls for live preview from camera:
+
+* Waterfall: Display selected band(s) sequentially moving across the screen.
+* Pseudocolour: Use three bands instead of one to create a pseudocolour image
+  (only available for waterfall preview).
+* Highlight saturated: Highlight light-saturated pixels in red and
+  dark-saturated pixels in blue (not available for pseudocoloured images).
+* Interpolation: Apply linear interpolation to scaled images.
+* Control buttons: Start/stop live preview, rotate preview left or right, clear
+  preview panel.
+
+===Capture and save===
+
+Controls related to capturing and saving images:
+
+* Format: Select output format used to save images. Currently only supports
+  ENVI standard.
+* Folder: Root folder for saving images.
+* File name: Template file name to use for saving images. Accepts Python
+  f-string fields; see File name templates section below for details.
+* Description: Description to include in image metadata. Accepts Python
+  f-string fields; see File name templates section below for details.
+* Control buttons: Capture and save image, reset stage to minimum, cancel image
+  capture (should immediately stop stage).
+
+
+==Config files==
+
+Configurations can be saved as JSON files with the extension .phc. The default
+configuration can be changed by saving a configuration as default_config.phc in
+the application root directory.
+
+
+==File name templates==
+
+The output file name and description text fields accept Python f-strings with
+the following fields:
+
+* {model} - make and model of the camera
+* {date} - today's date, formatted as yyyy-mm-dd
+* {time} - time of image acquisition, formatted as HH:MM:SS
+* {exp} - exposure time in ms
+* {bin} - pixel binning
+* {gain} - gain in dB
+* {raw_gain} - raw gain value
+* {mode} - 12-bit or 8-bit
+* {start} - start of imaging range in mm
+* {stop} - end of imaging range in mm
+* {travel} - range of stage imaged in mm
+* {vel} - stage velocity in mm/s
+* {version} - PyHSI version
+* {n} - image number
+
+The {n} field represents an identifier that causes the file name to be unique,
+so that multiple images captured with the same template name will be numbered
+sequentially.
+
+Fields can be adjusted using Python format specifiers, e.g. {n:03} will
+left-pad numbers with zeros to make them three digits long, and {exp:.2f} will
+round the exposure time to two decimpal places. Literal braces can be inserted
+by doubling them {{like this}}.
+
+
+==Capturing HSI data==
+
+Suggested workflow for caputuring images with the Zolix TSA200 and Basler
+piA1600:
+
+* Connect Zolix translation stage to power outlet and USB port
+* Connect Basler camera to power outlet and ethernet port
+* Connect enclosure to power outlet and check that lights turn on when door is
+  closed
+* Adjust exposure and gain using live preview so that there are no saturated
+  pixels when imaging a white calibration tile
+* Adjust focus by inserting extension rings or adjusting height of the camera
+  and/or sample using waterfall preview
+* Capture dark reference image with the lens cap on
+* Place calibration tile and sample tray on stage
+* Place lid fully over the enclosure to block out ambient light
+* Capture images of samples with door fully closed to turn on halogen lights
+* If necessary, adjust velocity to ensure square pixels
+"""
 
 ###############################################################################
 # Event name definitions and menu items
@@ -87,6 +208,8 @@ PREVIEW_FRAME = "PreviewFrame"
 MENU_SAVE_CONFIG = "Save configuration as... (Ctrl-S)"
 MENU_LOAD_CONFIG = "Load configuration... (Ctrl-L)"
 MENU_QUIT = "Quit (Ctrl-Q)"
+MENU_HELP = "Help (F1)"
+MENU_ABOUT = "About"
 
 
 ###############################################################################
@@ -269,7 +392,8 @@ class PyHSI:
 
         # PySimpleGUI layout
         menubar = sg.Menu([
-            ["&File", [MENU_SAVE_CONFIG, MENU_LOAD_CONFIG, MENU_QUIT]]
+            ["&File", ["&" + MENU_SAVE_CONFIG, "&" + MENU_LOAD_CONFIG, "&" + MENU_QUIT]],
+            ["&Help", ["&" + MENU_HELP, "&" + MENU_ABOUT]]
         ])
         content = [
             [
@@ -309,6 +433,7 @@ class PyHSI:
         self.window.bind("<Control-q>", MENU_QUIT)
         self.window.bind("<Control-l>", MENU_LOAD_CONFIG)
         self.window.bind("<Control-s>", MENU_SAVE_CONFIG)
+        self.window.bind("<F1>", MENU_HELP)
 
         # Set up logging
         sg.cprint_set_output_destination(self.window, CONSOLE_OUTPUT)
@@ -425,6 +550,10 @@ class PyHSI:
             self.save_config(values)
         elif event == MENU_LOAD_CONFIG:
             self.load_config()
+        elif event == MENU_HELP:
+            self.display_help()
+        elif event == MENU_ABOUT:
+            self.display_about()
         elif event in (MENU_QUIT, sg.WINDOW_CLOSE_ATTEMPTED_EVENT):
             self.exit()
 
@@ -639,25 +768,6 @@ class PyHSI:
             else:
                 raise ValueError("No source image specified for mock camera")
 
-    def confirm_popup(self, title, text):
-        """Utility function to display ok/cancel popup"""
-        popup = sg.Window(
-            title,
-            [[sg.Text(text)],
-             [sg.Button("Ok", bind_return_key=True), sg.Button("Cancel")]],
-            keep_on_top=True,
-            modal=True,
-            alpha_channel=0,
-            finalize=True
-        )
-        wx, wy = self.window.current_location()
-        ww, wh = self.window.size
-        pw, ph = popup.size
-        popup.move(wx + ww//2 - pw//2, wy + wh//2 - ph//2)
-        popup.set_alpha(1)
-        event, _ = popup.read(close=True)
-        return event == "Ok"
-
     def parse_numeric(self, input_, type_, min_, max_, fdb_key):
         """Utility function to validate and parse a numeric value"""
         try:
@@ -864,7 +974,7 @@ class PyHSI:
                 "model": self.camera.model_name,
                 "date": acq_time.strftime("%Y-%m-%d"),
                 "time": acq_time.strftime("%H:%M:%S"),
-                "exp": self.camera.exp,
+                "exp": self.camera.exp / 1000,
                 "bin": self.camera.binning,
                 "gain": self.camera.get_actual_gain(),
                 "raw_gain": self.camera.raw_gain,
@@ -899,6 +1009,58 @@ class PyHSI:
     def capture_image_progress_callback(self, progress):
         """Update image capture progress bar"""
         self.window.write_event_value(CAPTURE_THREAD_PROGRESS, progress)
+
+    def display_help(self):
+        """Display help message in popup"""
+        self.popup(
+            "Help",
+            [[sg.Column(
+                [[sg.Multiline(
+                    default_text=HELP_TEXT,
+                    disabled=True,
+                    size=(80, 20))],
+                 [sg.Button("Ok", bind_return_key=True)]],
+                element_justification="center"
+            )]]
+        )
+
+    def display_about(self):
+        """Display about message in popup"""
+        self.popup(
+            "About",
+            [[sg.Column(
+                [[sg.Text(CREDITS, justification="center", pad=(20, 20))],
+                 [sg.Button("Ok", bind_return_key=True)]],
+                element_justification="center"
+            )]]
+        )
+
+    def popup(self, title, layout):
+        """Utility function to display a popup centered to the main window"""
+        popup = sg.Window(
+            title,
+            layout,
+            keep_on_top=True,
+            modal=True,
+            alpha_channel=0,
+            finalize=True
+        )
+        wx, wy = self.window.current_location()
+        ww, wh = self.window.size
+        pw, ph = popup.size
+        popup.move(wx + ww//2 - pw//2, wy + wh//2 - ph//2)
+        popup.set_alpha(1)
+        event, _ = popup.read(close=True)
+        return event
+
+    def confirm_popup(self, title, text):
+        """Utility function to display ok/cancel popup"""
+        event = self.popup(
+            title,
+            [[sg.Text(text)],
+             [sg.Button("Ok", bind_return_key=True), sg.Button("Cancel")]]
+        )
+        return event == "Ok"
 
     def preview_panel(self):
         """Create layout for the preview panel"""
