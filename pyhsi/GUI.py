@@ -27,9 +27,18 @@ University of Strathclyde"""
 
 HELP_TEXT = r"""=HELP=
 
+PyHSI is an application for capturing hyperspectral images. Images are captured
+using the control panel on the left of the left side of the window, and
+previews of images are displayed in the view panel on the right. The console at
+the bottom of the window provides feedback on the application's operation. More
+details are saved to the log file. PyHSI can be started in debug mode with the
+--debug flag, which will result in additional details being printed to the
+console.
+
+
 ==Controls==
 
-Overview of available controls.
+Overview of the controls available in the control panel.
 
 ===Camera===
 
@@ -83,14 +92,15 @@ Controls related to capturing and saving images:
 * Description: Description to include in image metadata. Accepts Python
   f-string fields; see File name templates section below for details.
 * Control buttons: Capture and save image, reset stage to minimum, cancel image
-  capture (should immediately stop stage).
+  capture (this should immediately stop stage).
 
 
 ==Config files==
 
-Configurations can be saved as JSON files with the extension .phc. The default
-configuration can be changed by saving a configuration as default_config.phc in
-the application root directory.
+Configurations can be saved as JSON files with the extension .phc.
+Configuration files can be saved and loaded using options in the File menu. The
+default configuration can be changed by saving a configuration as
+default_config.phc in the application root directory.
 
 
 ==File name templates==
