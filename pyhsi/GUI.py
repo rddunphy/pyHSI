@@ -84,9 +84,9 @@ CONSOLE_OUTPUT = "ConsoleOutput"
 PREVIEW_CANVAS = "PreviewCanvas"
 PREVIEW_FRAME = "PreviewFrame"
 
-MENU_SAVE_CONFIG = "Save configuration as..."
-MENU_LOAD_CONFIG = "Load configuration..."
-MENU_QUIT = "Quit"
+MENU_SAVE_CONFIG = "Save configuration as... (Ctrl-S)"
+MENU_LOAD_CONFIG = "Load configuration... (Ctrl-L)"
+MENU_QUIT = "Quit (Ctrl-Q)"
 
 
 ###############################################################################
@@ -299,10 +299,16 @@ class PyHSI:
             size=(99999, 99999),
             finalize=True
         )
+
         for e in self.xy_expand_elements:
             e.expand(expand_x=True, expand_y=True)
         for e in self.x_expand_elements:
             e.expand(expand_x=True, expand_y=False, expand_row=False)
+
+        # Set up keyboard shortcuts
+        self.window.bind("<Control-q>", MENU_QUIT)
+        self.window.bind("<Control-l>", MENU_LOAD_CONFIG)
+        self.window.bind("<Control-s>", MENU_SAVE_CONFIG)
 
         # Set up logging
         sg.cprint_set_output_destination(self.window, CONSOLE_OUTPUT)
