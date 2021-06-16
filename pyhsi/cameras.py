@@ -33,6 +33,7 @@ class BaslerCamera:
             mode_12bit: use 12-bit mode (8-bit mode if False)
             device: hardware device to use instead of Pylon instance
         """
+        self.model_name = "Basler piA1600"
         self.device = device
         self.min_wl = 278.7
         self.max_wl = 1003.5
@@ -144,8 +145,6 @@ class BaslerCamera:
             ranges = [ranges]
         data = self.capture(stage, ranges, velocity=velocity, flip=flip,
                             verbose=verbose)
-        start = ranges[0][0]
-        stop = ranges[-1][1]
         md = {
             'acquisition time': acq_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
             'reflectance scale factor': self.ref_scale_factor,
@@ -154,22 +153,9 @@ class BaslerCamera:
         description = description.strip()
         if description != "":
             md['description'] = description
-        while True:
-            file_name = self._process_file_name(file_name, acq_time, start,
-                                                stop, velocity, data.shape)
-            try:
-                envi.save_image(file_name, data, dtype='uint16',
-                                interleave='bil', ext='.raw', metadata=md,
-                                force=overwrite)
-                break
-            except envi.EnviException:
-                new_name = input((f"File '{file_name}' exists. Enter new "
-                                  f"name or leave blank to overwrite: "))
-                new_name = new_name.strip()
-                if new_name:
-                    file_name = new_name
-                else:
-                    overwrite = True
+        envi.save_image(file_name, data, dtype='uint16',
+                        interleave='bil', ext='.raw', metadata=md,
+                        force=overwrite)
         if verbose:
             logging.info(f"Image saved as {file_name}.")
         return data, md
@@ -239,37 +225,6 @@ class BaslerCamera:
             data = np.fliplr(data)
         return data
 
-    def _process_file_name(self, fn, acq_time, start, stop, vel, shape):
-        # TODO: This should really be separate
-        fields = {
-            "date": acq_time.strftime("%Y-%m-%d"),
-            "time": acq_time.strftime("%H:%M:%S"),
-            "exp": f"{self.exp}",
-            "bin": f"{self.binning}",
-            "gain": f"{self.get_actual_gain():.2f}",
-            "raw_gain": f"{self.raw_gain}",
-            "mode": "12-bit" if self.mode_12bit else "8-bit",
-            "start": f"{start}",
-            "stop": f"{stop}",
-            "travel": f"{abs(start - stop)}",
-            "vel": f"{vel}",
-            "frames": f"{shape[0]}",
-            "samples": f"{shape[1]}",
-            "bands": f"{shape[2]}"
-        }
-        for field in fields:
-            fn = fn.replace(f"{{{field}}}", fields[field])
-        if not fn.endswith(".hdr"):
-            fn = fn + ".hdr"
-        if "{n}" in fn:
-            n = 0
-            while True:
-                test_fn = fn.replace("{n}", str(n))
-                if not os.path.exists(test_fn):
-                    return test_fn
-                n += 1
-        return fn
-
     def __str__(self):
         lines = [
             "Basler piA1600-gm camera",
@@ -288,6 +243,7 @@ class BaslerCamera:
 
 class MockCamera:
     def __init__(self, exp=4000, gain=100, binning=1, mode_12bit=True):
+        self.model_name = "PyHSI Mock Camera"
         self.raw_gain_factor = 1
         self.exp = exp
         self.gain = gain
@@ -372,8 +328,6 @@ class MockCamera:
             ranges = [ranges]
         data = self.capture(stage, ranges, velocity=velocity, flip=flip,
                             verbose=verbose, progress_callback=progress_callback)
-        start = ranges[0][0]
-        stop = ranges[-1][1]
         md = {
             'acquisition time': acq_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
             'reflectance scale factor': self.ref_scale_factor,
@@ -382,22 +336,9 @@ class MockCamera:
         description = description.strip()
         if description != "":
             md['description'] = description
-        while True:
-            file_name = self._process_file_name(file_name, acq_time, start,
-                                                stop, velocity, data.shape)
-            try:
-                envi.save_image(file_name, data, dtype='uint16',
-                                interleave='bil', ext='.raw', metadata=md,
-                                force=overwrite)
-                break
-            except envi.EnviException:
-                new_name = input((f"File '{file_name}' exists. Enter new "
-                                  f"name or leave blank to overwrite: "))
-                new_name = new_name.strip()
-                if new_name:
-                    file_name = new_name
-                else:
-                    overwrite = True
+        envi.save_image(file_name, data, dtype='uint16',
+                        interleave='bil', ext='.raw', metadata=md,
+                        force=overwrite)
         if verbose:
             logging.info(f"Image saved as {file_name}.")
         return data, md
@@ -442,33 +383,3 @@ class MockCamera:
         if highlight:
             img = highlight_saturated(img)
         return img
-
-    def _process_file_name(self, fn, acq_time, start, stop, vel, shape):
-        fields = {
-            "date": acq_time.strftime("%Y-%m-%d"),
-            "time": acq_time.strftime("%H:%M:%S"),
-            "exp": f"{self.exp}",
-            "bin": f"{self.binning}",
-            "gain": f"{self.get_actual_gain():.2f}",
-            "raw_gain": f"{self.raw_gain}",
-            "mode": "12-bit" if self.mode_12bit else "8-bit",
-            "start": f"{start}",
-            "stop": f"{stop}",
-            "travel": f"{abs(start - stop)}",
-            "vel": f"{vel}",
-            "frames": f"{shape[0]}",
-            "samples": f"{shape[1]}",
-            "bands": f"{shape[2]}"
-        }
-        for field in fields:
-            fn = fn.replace(f"{{{field}}}", fields[field])
-        if not fn.endswith(".hdr"):
-            fn = fn + ".hdr"
-        if "{n}" in fn:
-            n = 0
-            while True:
-                test_fn = fn.replace("{n}", str(n))
-                if not os.path.exists(test_fn):
-                    return test_fn
-                n += 1
-        return fn

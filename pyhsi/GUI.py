@@ -1,8 +1,10 @@
 import ctypes
+from datetime import datetime
 import json
 from json.decoder import JSONDecodeError
 import logging
 import os
+import string
 import sys
 import threading
 
@@ -170,6 +172,25 @@ def get_screen_size():
     h = root.winfo_height()
     root.destroy()
     return (w, h)
+
+
+def template_to_file_name(root_dir, template, namespace, ext, max_n=99999):
+    if not template.endswith(ext):
+        template += ext
+    uses_n = False
+    for _, field, _, _ in string.Formatter().parse(template):
+        if field == "n":
+            uses_n = True
+    for n in range(max_n + 1):
+        namespace['n'] = n
+        file_name = template.format(**namespace)
+        path = os.path.join(root_dir, file_name)
+        if not os.path.isfile(path):
+            return path
+        if not uses_n:
+            raise IOError(f"File {path} already exists")
+    raise IOError((f"All file names of the format {template} are in use "
+                   f"(n<={max_n})"))
 
 
 def get_icon_button(icon, key=None, button_type=None, file_types=None,
@@ -929,10 +950,34 @@ class PyHSI:
             self.window[RESET_STAGE_BTN].update(disabled=True)
             self.window[PREVIEW_BTN].update(disabled=True)
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=True)
+            acq_time = datetime.now()
+            fields = {
+                "model": self.camera.model_name,
+                "bands": len(self.camera.wl),
+                "date": acq_time.strftime("%Y-%m-%d"),
+                "time": acq_time.strftime("%H:%M:%S"),
+                "exp": self.camera.exp,
+                "bin": self.camera.binning,
+                "gain": self.camera.get_actual_gain(),
+                "raw_gain": self.camera.raw_gain,
+                "mode": "12-bit" if self.camera.mode_12bit else "8-bit",
+                "start": vals['ranges'][0],
+                "stop": vals['ranges'][1],
+                "travel": abs(vals['ranges'][0] - vals['ranges'][1]),
+                "vel": vals['velocity'],
+                "version": __version__
+            }
+            try:
+                file_name = template_to_file_name(values[OUTPUT_FOLDER], values[SAVE_FILE], fields, '.hdr')
+                description = values[IMAGE_DESCRIPTION_INPUT].format(**fields)
+            except KeyError as e:
+                msg = (f"{{{e}}} is not a valid field name (choose from "
+                       "model, bands, date, time, exp, bin, gain, raw_gain, "
+                       "mode, start, stop, travel, vel, or version)")
+                raise ValueError(msg)
             [img, md] = self.camera.capture_save(
-                vals['file_name'], self.stage, vals['ranges'],
-                vals['velocity'], flip=vals['flip'], verbose=True,
-                description=values[IMAGE_DESCRIPTION_INPUT],
+                file_name, self.stage, vals['ranges'], vals['velocity'],
+                flip=vals['flip'], verbose=True, description=description,
                 progress_callback=self.capture_image_progress_callback)
             self.show_captured_preview(img / self.camera.ref_scale_factor,
                                        md['wavelength'])

@@ -19,5 +19,6 @@
     "PreviewInterpolation": false,
     "OutputFormatSelect": "ENVI",
     "SaveFileName": "{date}_{n}",
+    "ImageDescriptionMultiline": "Image captured on {model} with PyHSI v{version}",
     "Version": "0.2.0"
 }
