@@ -94,6 +94,7 @@ IMAGE_DESCRIPTION_INPUT = "ImageDescription"
 CAPTURE_IMAGE_BTN = "CaptureImage"
 STOP_CAPTURE_BTN = "StopImageCapture"
 RESET_STAGE_BTN = "ResetStageButton"
+MOVE_STAGE_BTN = "MoveStageButton"
 CAPTURE_IMAGE_PROGRESS = "CaptureImageProgress"
 CAPTURE_THREAD_DONE = "CaptureThreadDone"
 CAPTURE_THREAD_PROGRESS = "CaputureThreadProgress"
@@ -123,6 +124,7 @@ ICON_DELETE = "delete"
 ICON_CAMERA = "camera"
 ICON_STOP = "stop"
 ICON_RESET = "reset"
+ICON_MOVE = "move"
 
 
 ###############################################################################
@@ -230,8 +232,9 @@ ENVI standard.
 f-string fields; see File name templates section below for details.
 * Description: Description to include in image metadata. Accepts Python \
 f-string fields; see File name templates section below for details.
-* Control buttons: Capture and save image, reset stage to minimum, cancel \
-image capture (this should immediately stop stage).
+* Control buttons: Capture and save image, reset stage to minimum, move stage \
+to target position, cancel image capture (this should immediately stop the \
+stage from moving).
 
 
 =Config files=
@@ -461,6 +464,7 @@ class PyHSI:
             size=(99999, 99999),
             finalize=True
         )
+        self.window[IMAGE_DESCRIPTION_INPUT].Widget.configure(undo=True)
 
         for e in self.xy_expand_elements:
             e.expand(expand_x=True, expand_y=True)
@@ -522,7 +526,7 @@ class PyHSI:
                 self.stop_live_preview()
             if self.capture_thread is not None:
                 self.stop_capture()
-        logging.debug("Exiting PyHSI")
+        logging.info("Exiting PyHSI")
         self.window.close()
         sys.exit()
 
@@ -552,11 +556,14 @@ class PyHSI:
             self.stop_capture()
         elif event == RESET_STAGE_BTN:
             self.reset_stage(values)
+        elif event == MOVE_STAGE_BTN:
+            self.move_stage(values)
         elif event == CAPTURE_THREAD_DONE:
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
             self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
             self.window[STOP_CAPTURE_BTN].update(disabled=True)
             self.window[RESET_STAGE_BTN].update(disabled=False)
+            self.window[MOVE_STAGE_BTN].update(disabled=False)
             self.window[PREVIEW_BTN].update(disabled=False)
             self.capture_thread = None
         elif event == CAPTURE_THREAD_PROGRESS:
@@ -830,12 +837,14 @@ class PyHSI:
                 raise ValueError(f"Minimum value {min_}")
             if val > max_:
                 raise ValueError(f"Maximum value {max_}")
-            self.window[fdb_key].update(visible=False)
+            if fdb_key is not None:
+                self.window[fdb_key].update(visible=False)
             return val
         except ValueError as e:
             logging.debug(f"ValueError for numeric input: {e}")
             # Display feedback text field
-            self.window[fdb_key].update(visible=True)
+            if fdb_key is not None:
+                self.window[fdb_key].update(visible=True)
             return None
 
     def parse_values(self, values):
@@ -978,6 +987,41 @@ class PyHSI:
             target=self.capture_image_thread, args=(values,))
         self.capture_thread.start()
 
+    def move_stage(self, values):
+        """Move stage to position specified in a popup"""
+        e, v = self.popup("Move stage", [
+            [
+                sg.Text("Target position"),
+                sg.Input(key="target", size=(6, 1)),
+                sg.Text("mm")
+            ],
+            [sg.Ok(), sg.Cancel()]
+        ])
+        if e == "Ok":
+            target = self.parse_numeric(v["target"], float, 0, 196, None)
+            if target is None:
+                logging.error("Invalid input - should be float between 0.0 and 196.0")
+            else:
+                self.capture_thread = InterruptableThread(
+                    target=self.move_stage_thread, args=(values, target))
+                self.capture_thread.start()
+
+    def move_stage_thread(self, values, target):
+        """Move stage to target specified in mm (uses capture_thread field)"""
+        try:
+            if not self.setup_stage(values):
+                return
+            logging.info(f"Moving stage to {target} mm")
+            self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
+            self.window[STOP_CAPTURE_BTN].update(disabled=False)
+            self.window[RESET_STAGE_BTN].update(disabled=True)
+            self.window[MOVE_STAGE_BTN].update(disabled=True)
+            self.stage.move_to(target, block=True)
+        except Exception as e:
+            logging.exception(f"Unable to move stage: {e}")
+        finally:
+            self.window.write_event_value(CAPTURE_THREAD_DONE, '')
+
     def reset_stage(self, values):
         """Start resetting stage in new thread"""
         self.capture_thread = InterruptableThread(
@@ -993,6 +1037,7 @@ class PyHSI:
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
             self.window[STOP_CAPTURE_BTN].update(disabled=False)
             self.window[RESET_STAGE_BTN].update(disabled=True)
+            self.window[MOVE_STAGE_BTN].update(disabled=True)
             self.stage.reset()
         except Exception as e:
             logging.exception(f"Unable to reset stage: {e}")
@@ -1005,6 +1050,7 @@ class PyHSI:
         self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
         self.window[STOP_CAPTURE_BTN].update(disabled=True)
         self.window[RESET_STAGE_BTN].update(disabled=False)
+        self.window[MOVE_STAGE_BTN].update(disabled=False)
         self.window[PREVIEW_BTN].update(disabled=False)
         self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
         self.capture_thread.interrupt()
@@ -1021,6 +1067,7 @@ class PyHSI:
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
             self.window[STOP_CAPTURE_BTN].update(disabled=False)
             self.window[RESET_STAGE_BTN].update(disabled=True)
+            self.window[MOVE_STAGE_BTN].update(disabled=True)
             self.window[PREVIEW_BTN].update(disabled=True)
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=True)
             acq_time = datetime.now()
@@ -1075,7 +1122,7 @@ class PyHSI:
                     expand_x=True,
                     expand_y=True,
                     size=(80, 20))],
-                 [sg.Button("Ok", bind_return_key=True)]],
+                 [sg.Ok()]],
                 element_justification="center",
                 expand_x=True,
                 expand_y=True
@@ -1089,13 +1136,14 @@ class PyHSI:
             "About",
             [[sg.Column(
                 [[sg.Text(CREDITS, justification="center", pad=(20, 20))],
-                 [sg.Button("Ok", bind_return_key=True)]],
+                 [sg.Ok()]],
                 element_justification="center"
             )]]
         )
 
     def popup(self, title, layout, **kwargs):
         """Utility function to display a popup centered to the main window"""
+        logging.debug(f"Opening '{title}' popup dialog")
         popup = sg.Window(
             title,
             layout,
@@ -1110,15 +1158,16 @@ class PyHSI:
         pw, ph = popup.size
         popup.move(wx + ww//2 - pw//2, wy + wh//2 - ph//2)
         popup.set_alpha(1)
-        event, _ = popup.read(close=True)
-        return event
+        e, v = popup.read(close=True)
+        logging.debug(f"Closing popup dialog with event {e}")
+        return e, v
 
     def confirm_popup(self, title, text):
         """Utility function to display ok/cancel popup"""
-        event = self.popup(
+        event, _ = self.popup(
             title,
             [[sg.Text(text)],
-             [sg.Button("Ok", bind_return_key=True), sg.Button("Cancel")]]
+             [sg.Ok(), sg.Cancel()]]
         )
         return event == "Ok"
 
@@ -1176,7 +1225,7 @@ class PyHSI:
                         button_type=sg.BUTTON_TYPE_BROWSE_FILE,
                         file_types=(("ENVI", "*.hdr"),),
                         initial_folder=self.default_folder,
-                        tooltip="Browse",
+                        tooltip="Browse...",
                         key=CAMERA_MOCK_FILE_BROWSE
                     )
                 ]], key=CAMERA_MOCK_CONTROL_PANE, pad=(0, 0), visible=False))
@@ -1510,7 +1559,7 @@ class PyHSI:
                     ICON_OPEN,
                     button_type=sg.BUTTON_TYPE_BROWSE_FOLDER,
                     initial_folder=self.default_folder,
-                    tooltip="Browse",
+                    tooltip="Browse...",
                     key=OUTPUT_FOLDER_BROWSE
                 )
             ],
@@ -1545,6 +1594,11 @@ class PyHSI:
                     ICON_RESET,
                     key=RESET_STAGE_BTN,
                     tooltip="Reset stage to minimum"
+                ),
+                get_icon_button(
+                    ICON_MOVE,
+                    key=MOVE_STAGE_BTN,
+                    tooltip="Move stage to target position..."
                 ),
                 get_icon_button(
                     ICON_STOP,
