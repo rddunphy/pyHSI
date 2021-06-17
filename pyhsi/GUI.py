@@ -26,39 +26,45 @@ from .utils import get_rgb_bands, add_wavelength_labels
 # Event name definitions and menu items
 ###############################################################################
 
-CAMERA_TYPE_SEL = "CameraSelect"
+# Unique string keys for GUI elements - some also used as keys for
+# configuration files
+
+APP_VERSION = "Version"
+PREVIEW_CANVAS = "PreviewCanvas"
+PREVIEW_FRAME = "PreviewFrame"
+CONSOLE_OUTPUT = "ConsoleOutput"
+
+# Camera control panel
+CAMERA_TYPE_SEL = "CameraModel"
 CAMERA_TYPE_BASLER = "Basler VNIR"
 CAMERA_TYPE_MOCK = "Mock camera"
-CAMERA_MOCK_FILE = "CameraMockFileName"
+CAMERA_MOCK_FILE = "MockCameraFilePath"
+CAMERA_MOCK_FILE_BROWSE = "CameraMockFileBrowseButton"
 CAMERA_MOCK_CONTROL_PANE = "CameraMockControlPanel"
 CAMERA_REAL_CONTROL_PANE = "CameraRealControlPanel"
-STAGE_TYPE_SEL = "StageSelect"
+EXP_INPUT = "ExposureTimeMS"
+EXP_FDB = "ExposureFeedback"
+BINNING_SEL = "PixelBinning"
+GAIN_INPUT = "RawGain"
+GAIN_DB_LBL = "GainDBLabel"
+GAIN_FDB = "GainFeedback"
+REVERSE_COLUMNS_CB = "ReverseColumns"
+
+# Stage control panel
+STAGE_TYPE_SEL = "StageModel"
 STAGE_TYPE_MOCK = "Mock stage"
 STAGE_TYPE_TSA200 = "Zolix TSA200"
 STAGE_PORT_SEL = "StagePortSelect"
 PORT_RELOAD_BTN = "PortRefresh"
-STAGE_PORT_PANE = "PortRefreshPanel"
-EXP_INPUT = "ExposureInput"
-EXP_FDB = "ExposureFeedback"
-BINNING_SEL = "BinningInput"
-GAIN_INPUT = "GainInput"
-GAIN_DB_LBL = "GainDBLabel"
-GAIN_FDB = "GainFeedback"
-RANGE_START_INPUT = "RangeStartInput"
-RANGE_END_INPUT = "RangeEndInput"
+STAGE_PORT_PANE = "PortRefreshPane"
+RANGE_START_INPUT = "RangeStart"
+RANGE_END_INPUT = "RangeEnd"
 RANGE_FDB = "RangeFeedback"
 ADD_RANGE_FIELDS_BTN = "AddRangeFields"
-VELOCITY_INPUT = "VelocityInput"
+VELOCITY_INPUT = "Velocity"
 VELOCITY_FDB = "VelocityFeedback"
-OUTPUT_FORMAT_SEL = "OutputFormatSelect"
-FORMAT_ENVI = "ENVI"
-REVERSE_COLUMNS_CB = "FlipOutputCheckbox"
-OUTPUT_FOLDER = "OutputFolder"
-SAVE_FILE = "SaveFileName"
-IMAGE_DESCRIPTION_INPUT = "ImageDescriptionMultiline"
-CAPTURE_IMAGE_BTN = "CaptureImage"
-STOP_CAPTURE_BTN = "StopImageCapture"
-RESET_STAGE_BTN = "ResetStageButton"
+
+# Live preview control panel
 PREVIEW_BTN = "CameraPreview"
 PREVIEW_CLEAR_BTN = "PreviewClearButton"
 PREVIEW_WATERFALL_CB = "PreviewWaterfall"
@@ -67,23 +73,32 @@ PREVIEW_INTERP_CB = "PreviewInterpolation"
 PREVIEW_ROTLEFT_BTN = "PreviewRotationLeft"
 PREVIEW_ROTRIGHT_BTN = "PreviewRotationRight"
 PREVIEW_PSEUDOCOLOUR_CB = "PreviewPseudocolour"
-PREVIEW_SINGLE_BAND_SLIDER = "PreviewSingleBandSlider"
+PREVIEW_SINGLE_BAND_SLIDER = "PreviewSingleBand"
 PREVIEW_SINGLE_BAND_NM = "PreviewSingleBandNm"
-PREVIEW_RED_BAND_SLIDER = "PreviewRedBandSlider"
+PREVIEW_RED_BAND_SLIDER = "PreviewRedBand"
 PREVIEW_RED_BAND_NM = "PreviewRedBandNm"
-PREVIEW_GREEN_BAND_SLIDER = "PreviewGreenBandSlider"
+PREVIEW_GREEN_BAND_SLIDER = "PreviewGreenBand"
 PREVIEW_GREEN_BAND_NM = "PreviewGreenBandNm"
-PREVIEW_BLUE_BAND_SLIDER = "PreviewBlueBandSlider"
+PREVIEW_BLUE_BAND_SLIDER = "PreviewBlueBand"
 PREVIEW_BLUE_BAND_NM = "PreviewBlueBandNm"
-PREVIEW_SINGLE_BAND_PANE = "PreviewSingleBandPanel"
-PREVIEW_RGB_BAND_PANE = "PreviewRgbBandPanel"
+PREVIEW_SINGLE_BAND_PANE = "PreviewSingleBandPane"
+PREVIEW_RGB_BAND_PANE = "PreviewRgbBandPane"
+
+# Capture and save control panel
+OUTPUT_FORMAT_SEL = "OutputFormat"
+FORMAT_ENVI = "ENVI"
+OUTPUT_FOLDER = "OutputFolder"
+OUTPUT_FOLDER_BROWSE = "OutputFolderBrowseButton"
+SAVE_FILE = "SaveFileName"
+IMAGE_DESCRIPTION_INPUT = "ImageDescription"
+CAPTURE_IMAGE_BTN = "CaptureImage"
+STOP_CAPTURE_BTN = "StopImageCapture"
+RESET_STAGE_BTN = "ResetStageButton"
 CAPTURE_IMAGE_PROGRESS = "CaptureImageProgress"
 CAPTURE_THREAD_DONE = "CaptureThreadDone"
 CAPTURE_THREAD_PROGRESS = "CaputureThreadProgress"
-CONSOLE_OUTPUT = "ConsoleOutput"
-PREVIEW_CANVAS = "PreviewCanvas"
-PREVIEW_FRAME = "PreviewFrame"
 
+# Menubar items
 MENU_SAVE_CONFIG = "Save configuration as... (Ctrl-S)"
 MENU_LOAD_CONFIG = "Load configuration... (Ctrl-L)"
 MENU_QUIT = "Quit (Ctrl-Q)"
@@ -122,7 +137,7 @@ CONFIG_KEYS = (
     PREVIEW_SINGLE_BAND_SLIDER, PREVIEW_RED_BAND_SLIDER,
     PREVIEW_GREEN_BAND_SLIDER, PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB,
     PREVIEW_INTERP_CB, OUTPUT_FORMAT_SEL, OUTPUT_FOLDER, SAVE_FILE,
-    IMAGE_DESCRIPTION_INPUT
+    IMAGE_DESCRIPTION_INPUT, APP_VERSION
 )
 
 # Config file versions that are compatible with this version of PyHSI
@@ -478,7 +493,7 @@ class PyHSI:
         if os.path.isfile(DEFAULT_CONFIG_PATH):
             self.load_config(config_file=DEFAULT_CONFIG_PATH)
         else:
-            logging.warn(f"No default configuration file at {DEFAULT_CONFIG_PATH}")
+            logging.debug(f"No default configuration file at {DEFAULT_CONFIG_PATH}")
 
     def run(self):
         """Main event loop - events handled in `handle_event`"""
@@ -569,6 +584,8 @@ class PyHSI:
                 self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
         elif event == PORT_RELOAD_BTN:
             self.reload_stage_ports()
+        elif event == OUTPUT_FOLDER:
+            self.set_default_folder(values[OUTPUT_FOLDER], warn=False)
         elif event == MENU_SAVE_CONFIG:
             self.save_config(values)
         elif event == MENU_LOAD_CONFIG:
@@ -702,6 +719,15 @@ class PyHSI:
         else:
             self.window[STAGE_PORT_PANE].update(visible=True)
 
+    def set_default_folder(self, folder, warn=True):
+        """Change folder used as initial folder for dialogs"""
+        if os.path.isdir(folder):
+            self.default_folder = folder
+            self.window[CAMERA_MOCK_FILE_BROWSE].InitialFolder = folder
+            self.window[OUTPUT_FOLDER_BROWSE].InitialFolder = folder
+        elif warn:
+            logging.warning(f"{folder} is not a valid directory")
+
     def load_config(self, config_file=None):
         """Load configuration from file"""
         if config_file is None:
@@ -715,23 +741,28 @@ class PyHSI:
         try:
             with open(config_file, 'r') as f:
                 config = json.load(f)
-                v = config["Version"]
+                v = config[APP_VERSION]
                 if v not in CONFIG_COMPAT_VERSIONS:
                     msg = (f"Configuration file version {v} incompatible ",
                            f"with PyHSI v{__version__} for {config_file}")
                     raise IOError(msg)
                 for key in CONFIG_KEYS:
-                    if key in config:
+                    if key in config and key != APP_VERSION:
                         self.window[key].update(value=config[key])
+                for key in config.keys():
+                    if key not in CONFIG_KEYS:
+                        logging.warning(f"Unknown key {key} in config file")
                 logging.info(f"Loaded configuration from {config_file}")
                 self.update_view()
+                if OUTPUT_FOLDER in config:
+                    self.set_default_folder(config[OUTPUT_FOLDER])
         except (IOError, JSONDecodeError) as e:
             logging.exception(f"Unable to read config file: {e}")
 
     def save_config(self, values):
         """Save current configuration to file"""
         config = {k: v for k, v in values.items() if k in CONFIG_KEYS}
-        config["Version"] = __version__
+        config[APP_VERSION] = __version__
         config_file = tk.filedialog.asksaveasfilename(
             filetypes=(("PyHSI config", "*.phc"),),
             defaultextension='.phc',
@@ -1145,7 +1176,8 @@ class PyHSI:
                         button_type=sg.BUTTON_TYPE_BROWSE_FILE,
                         file_types=(("ENVI", "*.hdr"),),
                         initial_folder=self.default_folder,
-                        tooltip="Browse"
+                        tooltip="Browse",
+                        key=CAMERA_MOCK_FILE_BROWSE
                     )
                 ]], key=CAMERA_MOCK_CONTROL_PANE, pad=(0, 0), visible=False))
             ],
@@ -1478,7 +1510,8 @@ class PyHSI:
                     ICON_OPEN,
                     button_type=sg.BUTTON_TYPE_BROWSE_FOLDER,
                     initial_folder=self.default_folder,
-                    tooltip="Browse"
+                    tooltip="Browse",
+                    key=OUTPUT_FOLDER_BROWSE
                 )
             ],
             [
