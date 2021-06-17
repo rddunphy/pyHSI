@@ -14,6 +14,7 @@ import PySimpleGUI as sg
 import serial
 from serial.tools import list_ports
 import spectral
+from spectral.io import envi
 import tkinter as tk
 
 from . import __version__
@@ -100,11 +101,30 @@ CAPTURE_THREAD_DONE = "CaptureThreadDone"
 CAPTURE_THREAD_PROGRESS = "CaputureThreadProgress"
 
 # Menubar items
+MENU_OPEN_FILE = "Open image in viewer... (Ctrl-O)"
 MENU_SAVE_CONFIG = "Save configuration as... (Ctrl-S)"
 MENU_LOAD_CONFIG = "Load configuration... (Ctrl-L)"
 MENU_QUIT = "Quit (Ctrl-Q)"
 MENU_HELP = "Help (F1)"
 MENU_ABOUT = "About"
+
+# Viewer window
+VIEW_FRAME = "ViewFrame"
+VIEW_CANVAS = "ViewCanvas"
+PSEUDOCOLOUR_CB = "PseudocolourCheckbox"
+SINGLE_BAND_SLIDER = "SingleBandSlider"
+SINGLE_BAND_NM = "SingleBandNmLabel"
+SINGLE_BAND_PANE = "SingleBandControlPane"
+RED_BAND_SLIDER = "RedBandSlider"
+RED_BAND_NM = "RedBandNmLabel"
+GREEN_BAND_SLIDER = "GreenBandSlider"
+GREEN_BAND_NM = "GreenBandNmLabel"
+BLUE_BAND_SLIDER = "BlueBandSlider"
+BLUE_BAND_NM = "BlueBandNmLabel"
+RGB_BAND_PANE = "RGBBandControlPane"
+INTERP_CB = "InterpolationCheckbox"
+ROTLEFT_BTN = "RotateLeftButton"
+ROTRIGHT_BTN = "RotateRightButton"
 
 
 ###############################################################################
@@ -402,11 +422,12 @@ def port_label(port):
 
 
 ###############################################################################
-# Main application class
+# Main application classes
 ###############################################################################
 
 
 class PyHSI:
+    """Root window for capturing images"""
 
     def __init__(self, debug=False):
         self.debug = debug
@@ -424,6 +445,7 @@ class PyHSI:
         self.viewer_file = None
         self.viewer_img = None
         self.capture_thread = None
+        self.n_viewers = 0
 
         # Global PySimpleGUI options
         icon_ext = ".ico" if sg.running_windows() else ".png"
@@ -433,7 +455,7 @@ class PyHSI:
 
         # PySimpleGUI layout
         menubar = sg.Menu([
-            ["&File", ["&" + MENU_SAVE_CONFIG, "&" + MENU_LOAD_CONFIG, "&" + MENU_QUIT]],
+            ["&File", ["&" + MENU_OPEN_FILE, "&" + MENU_SAVE_CONFIG, "&" + MENU_LOAD_CONFIG, "&" + MENU_QUIT]],
             ["&Help", ["&" + MENU_HELP, "&" + MENU_ABOUT]]
         ])
         content = [
@@ -475,6 +497,7 @@ class PyHSI:
         self.window.bind("<Control-q>", MENU_QUIT)
         self.window.bind("<Control-l>", MENU_LOAD_CONFIG)
         self.window.bind("<Control-s>", MENU_SAVE_CONFIG)
+        self.window.bind("<Control-o>", MENU_OPEN_FILE)
         self.window.bind("<F1>", MENU_HELP)
 
         # Set up logging
@@ -593,6 +616,8 @@ class PyHSI:
             self.reload_stage_ports()
         elif event == OUTPUT_FOLDER:
             self.set_default_folder(values[OUTPUT_FOLDER], warn=False)
+        elif event == MENU_OPEN_FILE:
+            self.open_file()
         elif event == MENU_SAVE_CONFIG:
             self.save_config(values)
         elif event == MENU_LOAD_CONFIG:
@@ -785,6 +810,21 @@ class PyHSI:
                 logging.info(f"Saved current configuration to {config_file}")
         except IOError as e:
             logging.exception(f"Unable to write config file: {e}")
+
+    def open_file(self):
+        """Open an HSI image in a new Viewer window"""
+        file_path = tk.filedialog.askopenfilename(
+            filetypes=(("ENVI", "*.hdr"),),
+            initialdir=self.default_folder,
+            parent=self.window.TKroot)
+        if file_path == () or file_path == "":
+            # User pressed cancel
+            return
+        logging.info(f"Opening {file_path}")
+        ws = self.window.size
+        size = (round(ws[0] * 0.7), round(ws[1] * 0.7))
+        Viewer(file_path, size, self.n_viewers)
+        self.n_viewers += 1
 
     def setup_stage(self, values):
         """Connect to stage - returns True if successful, False otherwise"""
@@ -1622,3 +1662,143 @@ class PyHSI:
              description_multiline)
         )
         return [[camera_frame], [stage_frame], [preview_frame], [output_frame]]
+
+
+class Viewer:
+    """Window for viewing existing HSI files"""
+
+    def __init__(self, file_path, size, vn):
+        self.file_path = file_path
+        self.img = envi.open(file_path)
+        self.vn = vn
+        self.xy_expand_elements = []
+        self.x_expand_elements = []
+        content = [
+            [
+                sg.Column(
+                    self.viewer_control_panel(),
+                    expand_y=True,
+                    expand_x=True
+                ),
+                sg.Column(
+                    self.view_panel(),
+                    expand_y=True,
+                    expand_x=True
+                )
+            ]
+        ]
+        self.window = sg.Window(
+            title=f"PyHSI - {os.path.basename(file_path)}",
+            layout=content,
+            resizable=True,
+            size=size,
+            finalize=True
+        )
+
+        for e in self.xy_expand_elements:
+            e.expand(expand_x=True, expand_y=True)
+        for e in self.x_expand_elements:
+            e.expand(expand_x=True, expand_y=False, expand_row=False)
+
+    def viewer_control_panel(self):
+        label_pad = (3, 0)
+        control_frame = sg.Frame("View controls", [
+            [
+                sg.Checkbox(
+                    "Pseudocolour",
+                    key=self.key(PSEUDOCOLOUR_CB),
+                    enable_events=True,
+                    default=True
+                )
+            ],
+            [
+                sg.pin(sg.Column([[
+                    sg.Text(
+                        "Band",
+                        size=(6, 1),
+                        pad=label_pad
+                    ),
+                    get_band_slider(self.key(SINGLE_BAND_SLIDER)),
+                    sg.Text(
+                        "--",
+                        size=(15, 1),
+                        key=self.key(SINGLE_BAND_NM)
+                    )
+                ]], key=self.key(SINGLE_BAND_PANE), pad=(0, 0), visible=False))
+            ],
+            [
+                sg.pin(sg.Column([
+                    [
+                        sg.Text(
+                            "Red",
+                            size=(6, 1),
+                            pad=label_pad
+                        ),
+                        get_band_slider(self.key(RED_BAND_SLIDER)),
+                        sg.Text(
+                            "--",
+                            size=(15, 1),
+                            key=self.key(RED_BAND_NM)
+                        )
+                    ],
+                    [
+                        sg.Text(
+                            "Green",
+                            size=(6, 1),
+                            pad=label_pad
+                        ),
+                        get_band_slider(self.key(GREEN_BAND_SLIDER)),
+                        sg.Text(
+                            "--",
+                            size=(15, 1),
+                            key=self.key(GREEN_BAND_NM)
+                        )
+                    ],
+                    [
+                        sg.Text(
+                            "Blue",
+                            size=(6, 1),
+                            pad=label_pad
+                        ),
+                        get_band_slider(self.key(BLUE_BAND_SLIDER)),
+                        sg.Text(
+                            "--",
+                            size=(15, 1),
+                            key=self.key(BLUE_BAND_NM)
+                        )
+                    ]
+                ], key=self.key(RGB_BAND_PANE), pad=(0, 0)))
+            ],
+            [
+                sg.Checkbox(
+                    "Interpolation",
+                    key=self.key(INTERP_CB),
+                    enable_events=True
+                )
+            ],
+            [
+                get_icon_button(
+                    ICON_ROT_LEFT,
+                    key=self.key(ROTLEFT_BTN),
+                    tooltip="Rotate view left"
+                ),
+                get_icon_button(
+                    ICON_ROT_RIGHT,
+                    key=self.key(ROTRIGHT_BTN),
+                    tooltip="Rotate view right"
+                )
+            ]
+        ])
+        return [[control_frame]]
+
+    def key(self, key):
+        return f"{key}_{self.vn}"
+
+    def view_panel(self):
+        """Create layout for the view panel"""
+        frame = sg.Frame("", [[
+            sg.Image(key=self.key(VIEW_CANVAS)),
+            sg.Image(size=(9999, 1))  # Hack to make frame expand correctly
+        ]], key=self.key(VIEW_FRAME))
+        self.xy_expand_elements.append(frame)
+        return [[frame]]
