@@ -21,137 +21,6 @@ from .cameras import BaslerCamera, MockCamera
 from .stages import TSA200, MockStage
 from .utils import get_rgb_bands, add_wavelength_labels
 
-CREDITS = f"""PyHSI v{__version__}
-© 2021 R. David Dunphy
-University of Strathclyde"""
-
-HELP_TEXT = r"""=HELP=
-
-PyHSI is an application for capturing hyperspectral images. Images are captured
-using the control panel on the left of the left side of the window, and
-previews of images are displayed in the view panel on the right. The console at
-the bottom of the window provides feedback on the application's operation. More
-details are saved to the log file. PyHSI can be started in debug mode with the
---debug flag, which will result in additional details being printed to the
-console.
-
-
-==Controls==
-
-Overview of the controls available in the control panel.
-
-===Camera===
-
-Controls related to camera hardware setup:
-
-* Model: Select camera model. Currently only supports the Basler piA1600 VNIR
-  camera. The mock camera allows the behaviour of a camera to be simulated
-  using an existing source file for testing purposes.
-* Exposure time: Sets the exposure time of the camera in ms.
-* Binning: Sets the pixel binning of the camera in both axes.
-* Gain: Sets the camera's raw gain value. Actual gain in dB is displayed to
-  the right.
-* Reverse order of columns: If checked, each frame will be mirrored
-  horizontally. Useful if the orientation of the camera is changed.
-
-===Stage===
-
-Controls related to stage hardware setup:
-
-* Model: Select stage model. Currently only supports Zolix TSA200 stage with
-  Schneider motor controller. The mock stage allows the behaviour of the TSA200
-  to be simulated for testing purposes.
-* Port: Serial port to use for translation stage. Should show up as name of
-  serial adapter (USB2Serial 1xRS422/485) once the stage is connected and
-  refresh button has been pressed.
-* Capture range: Start and end positions of stage in mm to be imaged.
-* Velocity: Stage imaging velocity in mm/s.
-
-===Live preview===
-
-Controls for live preview from camera:
-
-* Waterfall: Display selected band(s) sequentially moving across the screen.
-* Pseudocolour: Use three bands instead of one to create a pseudocolour image
-  (only available for waterfall preview).
-* Highlight saturated: Highlight light-saturated pixels in red and
-  dark-saturated pixels in blue (not available for pseudocoloured images).
-* Interpolation: Apply linear interpolation to scaled images.
-* Control buttons: Start/stop live preview, rotate preview left or right, clear
-  preview panel.
-
-===Capture and save===
-
-Controls related to capturing and saving images:
-
-* Format: Select output format used to save images. Currently only supports
-  ENVI standard.
-* Folder: Root folder for saving images.
-* File name: Template file name to use for saving images. Accepts Python
-  f-string fields; see File name templates section below for details.
-* Description: Description to include in image metadata. Accepts Python
-  f-string fields; see File name templates section below for details.
-* Control buttons: Capture and save image, reset stage to minimum, cancel image
-  capture (this should immediately stop stage).
-
-
-==Config files==
-
-Configurations can be saved as JSON files with the extension .phc.
-Configuration files can be saved and loaded using options in the File menu. The
-default configuration can be changed by saving a configuration as
-default_config.phc in the application root directory.
-
-
-==File name templates==
-
-The output file name and description text fields accept Python f-strings with
-the following fields:
-
-* {model} - make and model of the camera
-* {date} - today's date, formatted as yyyy-mm-dd
-* {time} - time of image acquisition, formatted as HH:MM:SS
-* {exp} - exposure time in ms
-* {bin} - pixel binning
-* {gain} - gain in dB
-* {raw_gain} - raw gain value
-* {mode} - 12-bit or 8-bit
-* {start} - start of imaging range in mm
-* {stop} - end of imaging range in mm
-* {travel} - range of stage imaged in mm
-* {vel} - stage velocity in mm/s
-* {version} - PyHSI version
-* {n} - image number
-
-The {n} field represents an identifier that causes the file name to be unique,
-so that multiple images captured with the same template name will be numbered
-sequentially.
-
-Fields can be adjusted using Python format specifiers, e.g. {n:03} will
-left-pad numbers with zeros to make them three digits long, and {exp:.2f} will
-round the exposure time to two decimpal places. Literal braces can be inserted
-by doubling them {{like this}}.
-
-
-==Capturing HSI data==
-
-Suggested workflow for caputuring images with the Zolix TSA200 and Basler
-piA1600:
-
-* Connect Zolix translation stage to power outlet and USB port
-* Connect Basler camera to power outlet and ethernet port
-* Connect enclosure to power outlet and check that lights turn on when door is
-  closed
-* Adjust exposure and gain using live preview so that there are no saturated
-  pixels when imaging a white calibration tile
-* Adjust focus by inserting extension rings or adjusting height of the camera
-  and/or sample using waterfall preview
-* Capture dark reference image with the lens cap on
-* Place calibration tile and sample tray on stage
-* Place lid fully over the enclosure to block out ambient light
-* Capture images of samples with door fully closed to turn on halogen lights
-* If necessary, adjust velocity to ensure square pixels
-"""
 
 ###############################################################################
 # Event name definitions and menu items
@@ -240,6 +109,7 @@ ICON_CAMERA = "camera"
 ICON_STOP = "stop"
 ICON_RESET = "reset"
 
+
 ###############################################################################
 # Global configuration and logging settings
 ###############################################################################
@@ -270,6 +140,149 @@ LOG_FILE_PATH = os.path.abspath("pyhsi.log")
 
 # Allow ENVI header files with uppercase parameters
 spectral.settings.envi_support_nonlowercase_params = True
+
+
+###############################################################################
+# Help and About dialog texts
+###############################################################################
+
+CREDITS = f"""PyHSI v{__version__}
+© 2021 R. David Dunphy
+Center for Signal & Image Processing
+University of Strathclyde"""
+
+HELP_TEXT = f"""Help for PyHSI version {__version__}
+
+PyHSI is an application for capturing hyperspectral images. Images are \
+captured using the control panel on the left of the left side of the window, \
+and previews of images are displayed in the view panel on the right. The \
+console at the bottom of the window provides feedback on the application's \
+operation.
+
+
+=Controls=
+
+Overview of the controls available in the control panel.
+
+==Camera==
+
+Controls related to camera hardware setup:
+
+* Model: Select camera model. Currently only supports the Basler piA1600 \
+VNIR camera. The mock camera allows the behaviour of a camera to be simulated \
+using an existing source file for testing purposes.
+* Exposure time: Sets the exposure time of the camera in ms.
+* Binning: Sets the pixel binning of the camera in both axes.
+* Gain: Sets the camera's raw gain value. Actual gain in dB is displayed to \
+the right.
+* Reverse order of columns: If checked, each frame will be mirrored \
+horizontally. Useful if the orientation of the camera is changed.
+
+==Stage==
+
+Controls related to stage hardware setup:
+
+* Model: Select stage model. Currently only supports Zolix TSA200 stage with \
+Schneider motor controller. The mock stage allows the behaviour of the TSA200 \
+to be simulated for testing purposes.
+* Port: Serial port to use for translation stage. Should show up as name of \
+serial adapter (USB2Serial 1xRS422/485) once the stage is connected and \
+refresh button has been pressed.
+* Capture range: Start and end positions of stage in mm to be imaged.
+* Velocity: Stage imaging velocity in mm/s.
+
+==Live preview==
+
+Controls for live preview from camera:
+
+* Waterfall: Display selected band(s) sequentially moving across the screen.
+* Pseudocolour: Use three bands instead of one to create a pseudocolour image \
+(only available for waterfall preview).
+* Highlight saturated: Highlight light-saturated pixels in red and \
+dark-saturated pixels in blue (not available for pseudocoloured images).
+* Interpolation: Apply linear interpolation to scaled images.
+* Control buttons: Start/stop live preview, rotate preview left or right, \
+clear preview panel.
+
+==Capture and save==
+
+Controls related to capturing and saving images:
+
+* Format: Select output format used to save images. Currently only supports \
+ENVI standard.
+* Folder: Root folder for saving images.
+* File name: Template file name to use for saving images. Accepts Python \
+f-string fields; see File name templates section below for details.
+* Description: Description to include in image metadata. Accepts Python \
+f-string fields; see File name templates section below for details.
+* Control buttons: Capture and save image, reset stage to minimum, cancel \
+image capture (this should immediately stop stage).
+
+
+=Config files=
+
+Configurations can be saved as JSON files with the extension .phc. \
+Configuration files can be saved and loaded using options in the File menu. \
+The default configuration can be changed by saving a configuration to \
+{DEFAULT_CONFIG_PATH}.
+
+
+=File name templates=
+
+The output file name and description text fields accept Python f-strings with \
+the following fields:
+
+* {{model}} - make and model of the camera
+* {{date}} - today's date, formatted as yyyy-mm-dd
+* {{time}} - time of image acquisition, formatted as HH:MM:SS
+* {{exp}} - exposure time in ms
+* {{bin}} - pixel binning
+* {{gain}} - gain in dB
+* {{raw_gain}} - raw gain value
+* {{mode}} - 12-bit or 8-bit
+* {{start}} - start of imaging range in mm
+* {{stop}} - end of imaging range in mm
+* {{travel}} - range of stage imaged in mm
+* {{vel}} - stage velocity in mm/s
+* {{version}} - PyHSI version
+* {{n}} - image number
+
+The {{n}} field represents an identifier that causes the file name to be \
+unique, so that multiple images captured with the same template name will be \
+numbered sequentially.
+
+Fields can be adjusted using Python format specifiers, e.g. {{n:03}} will \
+left-pad numbers with zeros to make them three digits long, and {{exp:.2f}} \
+will round the exposure time to two decimal places. Literal braces can be \
+inserted by doubling them {{{{like this}}}}.
+
+
+=Log file=
+
+The output from the console as well as further details of any errors \
+encountered are saved to {LOG_FILE_PATH}. PyHSI can be started in debug mode \
+with the --debug flag, which will result in additional details being logged.
+
+
+=Capturing HSI data=
+
+Suggested workflow for caputuring images with the Zolix TSA200 stage and \
+Basler piA1600 VNIR camera:
+
+* Connect Zolix translation stage to power outlet and USB port
+* Connect Basler camera to power outlet and ethernet port
+* Connect enclosure to power outlet and check that lights turn on when door \
+is closed
+* Adjust exposure and gain using live preview so that there are no saturated \
+pixels when imaging a white calibration tile
+* Adjust focus by inserting extension rings or adjusting height of the camera \
+and/or sample using waterfall preview
+* Capture dark reference image with the lens cap on
+* Place calibration tile and sample tray on stage
+* Place lid fully over the enclosure to block out ambient light
+* Capture images of samples with door fully closed to turn on halogen lights
+* If necessary, adjust velocity to ensure square pixels
+"""
 
 
 ###############################################################################
@@ -1028,10 +1041,15 @@ class PyHSI:
                 [[sg.Multiline(
                     default_text=HELP_TEXT,
                     disabled=True,
+                    expand_x=True,
+                    expand_y=True,
                     size=(80, 20))],
                  [sg.Button("Ok", bind_return_key=True)]],
-                element_justification="center"
-            )]]
+                element_justification="center",
+                expand_x=True,
+                expand_y=True
+            )]],
+            resizable=True
         )
 
     def display_about(self):
@@ -1045,7 +1063,7 @@ class PyHSI:
             )]]
         )
 
-    def popup(self, title, layout):
+    def popup(self, title, layout, **kwargs):
         """Utility function to display a popup centered to the main window"""
         popup = sg.Window(
             title,
@@ -1053,7 +1071,8 @@ class PyHSI:
             keep_on_top=True,
             modal=True,
             alpha_channel=0,
-            finalize=True
+            finalize=True,
+            **kwargs
         )
         wx, wy = self.window.current_location()
         ww, wh = self.window.size
