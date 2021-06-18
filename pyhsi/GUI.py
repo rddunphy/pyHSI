@@ -367,7 +367,7 @@ class InterruptableThread(threading.Thread):
             logging.error("Failed to interrupt capture thread")
 
 
-def get_band_slider(key, range=(1, 100), default_value=50):
+def get_band_slider(key, range=(0, 99), default_value=49):
     """Create slider element for selecting hyperspectral band"""
     return sg.Slider(
         range=range,
@@ -547,11 +547,11 @@ class PyHSI:
             while True:
                 timeout = 10 if self.live_preview_active else None
                 window, event, values = sg.read_all_windows(timeout=timeout)
-                if window is self.window:
-                    if event != '__TIMEOUT__':
-                        self.handle_event(event, values)
-                    elif self.live_preview_active:
-                        self.next_live_preview_frame(values)
+                if event == '__TIMEOUT__' and self.live_preview_active:
+                    _, values = self.window.read(timeout=0)
+                    self.next_live_preview_frame(values)
+                elif window is self.window:
+                    self.handle_event(event, values)
                 else:
                     try:
                         viewer = self.viewers[window]
@@ -708,10 +708,10 @@ class PyHSI:
         g_b = round(values[PREVIEW_GREEN_BAND_SLIDER])
         b_b = round(values[PREVIEW_BLUE_BAND_SLIDER])
         if self.camera.wl:
-            s_nm = self.camera.wl[s_b - 1]
-            r_nm = self.camera.wl[r_b - 1]
-            g_nm = self.camera.wl[g_b - 1]
-            b_nm = self.camera.wl[b_b - 1]
+            s_nm = self.camera.wl[s_b]
+            r_nm = self.camera.wl[r_b]
+            g_nm = self.camera.wl[g_b]
+            b_nm = self.camera.wl[b_b]
             self.window[PREVIEW_SINGLE_BAND_NM].update(f"{s_b} ({s_nm:.1f} nm)")
             self.window[PREVIEW_RED_BAND_NM].update(f"{r_b} ({r_nm:.1f} nm)")
             self.window[PREVIEW_GREEN_BAND_NM].update(f"{g_b} ({g_nm:.1f} nm)")
@@ -727,29 +727,29 @@ class PyHSI:
         if self.camera.wl:
             n = len(self.camera.wl)
             rgb = get_rgb_bands(self.camera.wl)
-            r = rgb[0] - 1
-            g = rgb[1] - 1
-            b = rgb[2] - 1
+            r = rgb[0]
+            g = rgb[1]
+            b = rgb[2]
         else:
             n = 100
-            r = 75
-            g = 50
-            b = 25
-        s = n // 2
+            r = 74
+            g = 49
+            b = 24
+        s = (n - 1) // 2
         self.window[PREVIEW_SINGLE_BAND_SLIDER].update(
-            range=(1, n), disabled=False)
+            range=(0, n - 1), disabled=False)
         self.window[PREVIEW_SINGLE_BAND_SLIDER].update(value=s)
         values[PREVIEW_SINGLE_BAND_SLIDER] = s
         self.window[PREVIEW_RED_BAND_SLIDER].update(
-            range=(1, n), disabled=False)
+            range=(0, n - 1), disabled=False)
         self.window[PREVIEW_RED_BAND_SLIDER].update(value=r)
         values[PREVIEW_RED_BAND_SLIDER] = r
         self.window[PREVIEW_GREEN_BAND_SLIDER].update(
-            range=(1, n), disabled=False)
+            range=(0, n - 1), disabled=False)
         self.window[PREVIEW_GREEN_BAND_SLIDER].update(value=g)
         values[PREVIEW_GREEN_BAND_SLIDER] = g
         self.window[PREVIEW_BLUE_BAND_SLIDER].update(
-            range=(1, n), disabled=False)
+            range=(0, n - 1), disabled=False)
         self.window[PREVIEW_BLUE_BAND_SLIDER].update(value=b)
         values[PREVIEW_BLUE_BAND_SLIDER] = b
         self.update_preview_slider_labels(values)
@@ -1004,12 +1004,12 @@ class PyHSI:
         if not hl and not pc:
             frame = np.repeat(frame[:, :, np.newaxis], 3, axis=2)
         if pc and (waterfall or not hl):
-            bgr = (round(values[PREVIEW_BLUE_BAND_SLIDER]) - 1,
-                   round(values[PREVIEW_GREEN_BAND_SLIDER]) - 1,
-                   round(values[PREVIEW_RED_BAND_SLIDER]) - 1)
+            bgr = (round(values[PREVIEW_BLUE_BAND_SLIDER]),
+                   round(values[PREVIEW_GREEN_BAND_SLIDER]),
+                   round(values[PREVIEW_RED_BAND_SLIDER]))
             self.waterfall_frame[:, -1] = frame[:, bgr]
         else:
-            band = round(values[PREVIEW_SINGLE_BAND_SLIDER]) - 1
+            band = round(values[PREVIEW_SINGLE_BAND_SLIDER])
             self.waterfall_frame[:, -1] = frame[:, band]
         if len(frame.shape) == 2:
             self.live_preview_frame = np.repeat(frame[:, :, np.newaxis], 3, axis=2)
