@@ -445,7 +445,6 @@ class PyHSI:
         self.viewer_file = None
         self.viewer_img = None
         self.capture_thread = None
-        self.n_viewers = 0
 
         # Global PySimpleGUI options
         icon_ext = ".ico" if sg.running_windows() else ".png"
@@ -823,8 +822,7 @@ class PyHSI:
         logging.info(f"Opening {file_path}")
         ws = self.window.size
         size = (round(ws[0] * 0.7), round(ws[1] * 0.7))
-        Viewer(file_path, size, self.n_viewers)
-        self.n_viewers += 1
+        Viewer(file_path, size)
 
     def setup_stage(self, values):
         """Connect to stage - returns True if successful, False otherwise"""
@@ -1667,10 +1665,9 @@ class PyHSI:
 class Viewer:
     """Window for viewing existing HSI files"""
 
-    def __init__(self, file_path, size, vn):
+    def __init__(self, file_path, size):
         self.file_path = file_path
         self.img = envi.open(file_path)
-        self.vn = vn
         self.xy_expand_elements = []
         self.x_expand_elements = []
         content = [
@@ -1701,12 +1698,13 @@ class Viewer:
             e.expand(expand_x=True, expand_y=False, expand_row=False)
 
     def viewer_control_panel(self):
+        """View controls"""
         label_pad = (3, 0)
         control_frame = sg.Frame("View controls", [
             [
                 sg.Checkbox(
                     "Pseudocolour",
-                    key=self.key(PSEUDOCOLOUR_CB),
+                    key=PSEUDOCOLOUR_CB,
                     enable_events=True,
                     default=True
                 )
@@ -1718,13 +1716,13 @@ class Viewer:
                         size=(6, 1),
                         pad=label_pad
                     ),
-                    get_band_slider(self.key(SINGLE_BAND_SLIDER)),
+                    get_band_slider(SINGLE_BAND_SLIDER),
                     sg.Text(
                         "--",
                         size=(15, 1),
-                        key=self.key(SINGLE_BAND_NM)
+                        key=SINGLE_BAND_NM
                     )
-                ]], key=self.key(SINGLE_BAND_PANE), pad=(0, 0), visible=False))
+                ]], key=SINGLE_BAND_PANE, pad=(0, 0), visible=False))
             ],
             [
                 sg.pin(sg.Column([
@@ -1734,11 +1732,11 @@ class Viewer:
                             size=(6, 1),
                             pad=label_pad
                         ),
-                        get_band_slider(self.key(RED_BAND_SLIDER)),
+                        get_band_slider(RED_BAND_SLIDER),
                         sg.Text(
                             "--",
                             size=(15, 1),
-                            key=self.key(RED_BAND_NM)
+                            key=RED_BAND_NM
                         )
                     ],
                     [
@@ -1747,11 +1745,11 @@ class Viewer:
                             size=(6, 1),
                             pad=label_pad
                         ),
-                        get_band_slider(self.key(GREEN_BAND_SLIDER)),
+                        get_band_slider(GREEN_BAND_SLIDER),
                         sg.Text(
                             "--",
                             size=(15, 1),
-                            key=self.key(GREEN_BAND_NM)
+                            key=GREEN_BAND_NM
                         )
                     ],
                     [
@@ -1760,45 +1758,42 @@ class Viewer:
                             size=(6, 1),
                             pad=label_pad
                         ),
-                        get_band_slider(self.key(BLUE_BAND_SLIDER)),
+                        get_band_slider(BLUE_BAND_SLIDER),
                         sg.Text(
                             "--",
                             size=(15, 1),
-                            key=self.key(BLUE_BAND_NM)
+                            key=BLUE_BAND_NM
                         )
                     ]
-                ], key=self.key(RGB_BAND_PANE), pad=(0, 0)))
+                ], key=RGB_BAND_PANE, pad=(0, 0)))
             ],
             [
                 sg.Checkbox(
                     "Interpolation",
-                    key=self.key(INTERP_CB),
+                    key=INTERP_CB,
                     enable_events=True
                 )
             ],
             [
                 get_icon_button(
                     ICON_ROT_LEFT,
-                    key=self.key(ROTLEFT_BTN),
+                    key=ROTLEFT_BTN,
                     tooltip="Rotate view left"
                 ),
                 get_icon_button(
                     ICON_ROT_RIGHT,
-                    key=self.key(ROTRIGHT_BTN),
+                    key=ROTRIGHT_BTN,
                     tooltip="Rotate view right"
                 )
             ]
         ])
         return [[control_frame]]
 
-    def key(self, key):
-        return f"{key}_{self.vn}"
-
     def view_panel(self):
         """Create layout for the view panel"""
         frame = sg.Frame("", [[
-            sg.Image(key=self.key(VIEW_CANVAS)),
+            sg.Image(key=VIEW_CANVAS),
             sg.Image(size=(9999, 1))  # Hack to make frame expand correctly
-        ]], key=self.key(VIEW_FRAME))
+        ]], key=VIEW_FRAME)
         self.xy_expand_elements.append(frame)
         return [[frame]]
