@@ -5,6 +5,7 @@ from json.decoder import JSONDecodeError
 import logging
 import os
 import string
+import subprocess
 import sys
 import threading
 
@@ -96,6 +97,7 @@ CAPTURE_IMAGE_BTN = "CaptureImage"
 STOP_CAPTURE_BTN = "StopImageCapture"
 RESET_STAGE_BTN = "ResetStageButton"
 MOVE_STAGE_BTN = "MoveStageButton"
+OPEN_IN_VIEWER_BTN = "OpenCapturedFileInViewerButton"
 CAPTURE_IMAGE_PROGRESS = "CaptureImageProgress"
 CAPTURE_THREAD_DONE = "CaptureThreadDone"
 CAPTURE_THREAD_PROGRESS = "CaputureThreadProgress"
@@ -126,6 +128,8 @@ INTERP_CB = "InterpolationCheckbox"
 ROTLEFT_BTN = "RotateLeftButton"
 ROTRIGHT_BTN = "RotateRightButton"
 METADATA_DESCRIPTION = "MetadataDescriptionMultiline"
+OPEN_FOLDER_IN_BROWSER = "OpenFolderInFileBrowser"
+OPEN_HEADER_FILE_IN_EDITOR = "OpenHeaderFileInEditor"
 
 
 ###############################################################################
@@ -146,6 +150,9 @@ ICON_CAMERA = "camera"
 ICON_STOP = "stop"
 ICON_RESET = "reset"
 ICON_MOVE = "move"
+ICON_EXPAND = "expand"
+ICON_FILE = "file"
+ICON_BROWSER = "browser"
 
 
 ###############################################################################
@@ -466,6 +473,7 @@ class PyHSI:
         self.viewer_file = None
         self.viewer_img = None
         self.capture_thread = None
+        self.captured_file = None
 
         # Global PySimpleGUI options
         icon_ext = ".ico" if sg.running_windows() else ".png"
@@ -614,6 +622,8 @@ class PyHSI:
             self.reset_stage(values)
         elif event == MOVE_STAGE_BTN:
             self.move_stage(values)
+        elif event == OPEN_IN_VIEWER_BTN:
+            self.open_file(self.captured_file)
         elif event == CAPTURE_THREAD_DONE:
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
             self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
@@ -621,6 +631,8 @@ class PyHSI:
             self.window[RESET_STAGE_BTN].update(disabled=False)
             self.window[MOVE_STAGE_BTN].update(disabled=False)
             self.window[PREVIEW_BTN].update(disabled=False)
+            if self.captured_file is not None:
+                self.window[OPEN_IN_VIEWER_BTN].update(disabled=False)
             self.capture_thread = None
         elif event == CAPTURE_THREAD_PROGRESS:
             self.window[CAPTURE_IMAGE_PROGRESS].update(values[CAPTURE_THREAD_PROGRESS])
@@ -849,15 +861,16 @@ class PyHSI:
         except IOError as e:
             logging.exception(f"Unable to write config file: {e}")
 
-    def open_file(self):
+    def open_file(self, file_path=None):
         """Open an HSI image in a new Viewer window"""
-        file_path = tk.filedialog.askopenfilename(
-            filetypes=(("ENVI", "*.hdr"),),
-            initialdir=self.default_folder,
-            parent=self.window.TKroot)
-        if file_path == () or file_path == "":
-            # User pressed cancel
-            return
+        if file_path is None:
+            file_path = tk.filedialog.askopenfilename(
+                filetypes=(("ENVI", "*.hdr"),),
+                initialdir=self.default_folder,
+                parent=self.window.TKroot)
+            if file_path == () or file_path == "":
+                # User pressed cancel
+                return
         logging.info(f"Opening {file_path}")
         ws = self.window.size
         size = (round(ws[0] * 0.7), round(ws[1] * 0.7))
@@ -1164,6 +1177,7 @@ class PyHSI:
                 progress_callback=self.capture_image_progress_callback)
             self.show_captured_preview(img / self.camera.ref_scale_factor,
                                        md['wavelength'])
+            self.captured_file = file_name
         except Exception as e:
             logging.exception(f"Unable to capture image: {e}")
         finally:
@@ -1668,6 +1682,12 @@ class PyHSI:
                     tooltip="Stop image capture",
                     disabled=True
                 ),
+                get_icon_button(
+                    ICON_EXPAND,
+                    key=OPEN_IN_VIEWER_BTN,
+                    tooltip="Open last captured file in viewer",
+                    disabled=True
+                ),
                 sg.pin(sg.ProgressBar(
                     1.0,
                     size=(20, 15),
@@ -1691,7 +1711,7 @@ class Viewer():
 
     def __init__(self, root_window, file_path, size):
         self.root_window = root_window
-        self.file_path = file_path
+        self.file_path = os.path.abspath(file_path)
         self.file_name = os.path.basename(file_path)
         self.img = envi.open(file_path)
         self.xy_expand_elements = []
@@ -1744,7 +1764,7 @@ class Viewer():
         self.update_sliders(values)
 
     def handle_event(self, event, values):
-        logging.debug(f"Handling {event} event in Viewer({self.file_name})")
+        logging.debug(f"Handling {event} event in viewer window for '{self.file_name}'")
         if event == MENU_OPEN_FILE:
             self.root_window.open_file()
         elif event == MENU_HELP:
@@ -1762,6 +1782,10 @@ class Viewer():
         elif event == ROTRIGHT_BTN:
             self.rotation = (self.rotation - 1) % 4
             self.update_view()
+        elif event == OPEN_FOLDER_IN_BROWSER:
+            self.open_file_externally(os.path.dirname(self.file_path))
+        elif event == OPEN_HEADER_FILE_IN_EDITOR:
+            self.open_file_externally(self.file_path)
         elif event in (MENU_QUIT, sg.WINDOW_CLOSE_ATTEMPTED_EVENT, sg.WIN_CLOSED):
             self.exit()
         elif event is None:
@@ -1772,7 +1796,7 @@ class Viewer():
 
     def exit(self):
         """Close the viewer window"""
-        logging.debug(f"Closing viewer window ({self.file_name})")
+        logging.debug(f"Closing viewer window for '{self.file_name}'")
         self.root_window.viewers.pop(self.window)
         self.window.close()
 
@@ -1818,6 +1842,16 @@ class Viewer():
         img = resize_img_to_area(img, self.window[VIEW_FRAME].get_size(), interpolation=self.interpolation)
         img = cv2.imencode('.png', img)[1].tobytes()
         self.window[VIEW_CANVAS].update(data=img)
+
+    def open_file_externally(self, file_path):
+        if sg.running_windows():
+            os.startfile(file_path)
+        elif sg.running_mac():
+            subprocess.call(["open", file_path])
+        elif sg.running_linux():
+            subprocess.call(["xdg-open", file_path])
+        else:
+            logging.error("Operation not supported for this operating system")
 
     def viewer_control_panel(self):
         """View controls"""
@@ -1933,6 +1967,16 @@ class Viewer():
             )
             layout += [[sg.Text("Description", pad=label_pad, size=label_size), description_multiline]]
             self.x_expand_elements.append(description_multiline)
+        layout += [[
+            get_icon_button(
+                ICON_BROWSER,
+                key=OPEN_FOLDER_IN_BROWSER,
+                tooltip="Open folder in file explorer"),
+            get_icon_button(
+                ICON_FILE,
+                key=OPEN_HEADER_FILE_IN_EDITOR,
+                tooltip="Open header file in text editor")
+        ]]
         metadata_frame = sg.Frame("Metadata", layout)
         self.x_expand_elements.extend((control_frame, metadata_frame))
         return [[control_frame], [metadata_frame]]

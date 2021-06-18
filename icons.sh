@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
-declare -a icons=("camera" "delete" "pause" "open" "play" "reload" "rotate-left" "rotate-right" "stop" "reset" "move")
+declare -a icons=("camera" "delete" "pause" "open" "play" "reload" "rotate-left"
+	"rotate-right" "stop" "reset" "move" "browser" "expand" "file")
+
 size=25
 
 for f in ${icons[@]}; do
