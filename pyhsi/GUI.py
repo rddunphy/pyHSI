@@ -540,6 +540,13 @@ class PyHSI:
         self.window.bind("<Control-l>", MENU_LOAD_CONFIG)
         self.window.bind("<Control-s>", MENU_SAVE_CONFIG)
         self.window.bind("<Control-o>", MENU_OPEN_FILE)
+        self.window.bind("<Control-Shift-O>", OPEN_IN_VIEWER_BTN)
+        self.window.bind("<Control-p>", PREVIEW_BTN)
+        self.window.bind("<Control-w>", PREVIEW_CLEAR_BTN)
+        self.window.bind("<Control-Return>", CAPTURE_IMAGE_BTN)
+        self.window.bind("<Control-r>", RESET_STAGE_BTN)
+        self.window.bind("<Control-m>", MOVE_STAGE_BTN)
+        self.window.bind("<Control-h>", STOP_CAPTURE_BTN)
         self.window.bind("<F1>", MENU_HELP)
 
         # Set up logging
@@ -637,7 +644,8 @@ class PyHSI:
         elif event == MOVE_STAGE_BTN:
             self.move_stage(values)
         elif event == OPEN_IN_VIEWER_BTN:
-            self.open_file(self.captured_file)
+            if self.captured_file is not None:
+                self.open_file(self.captured_file)
         elif event == CAPTURE_THREAD_DONE:
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
             self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
@@ -1355,7 +1363,8 @@ class PyHSI:
                             enable_events=True,
                             key=BINNING_SEL,
                             readonly=True
-                        )
+                        ),
+                        sg.Text("px")
                     ],
                     [
                         sg.Text(
@@ -1586,7 +1595,7 @@ class PyHSI:
                 get_icon_button(
                     ICON_PLAY,
                     key=PREVIEW_BTN,
-                    tooltip="Toggle preview"
+                    tooltip="Toggle preview (Ctrl-P)"
                 ),
                 get_icon_button(
                     ICON_ROT_LEFT,
@@ -1603,7 +1612,7 @@ class PyHSI:
                 get_icon_button(
                     ICON_DELETE,
                     key=PREVIEW_CLEAR_BTN,
-                    tooltip="Clear preview",
+                    tooltip="Clear preview (Ctrl-W)",
                     disabled=True
                 )
             ]
@@ -1678,28 +1687,28 @@ class PyHSI:
                 get_icon_button(
                     ICON_CAMERA,
                     key=CAPTURE_IMAGE_BTN,
-                    tooltip="Capture image and save"
+                    tooltip="Capture image and save (Ctrl-Enter)"
                 ),
                 get_icon_button(
                     ICON_RESET,
                     key=RESET_STAGE_BTN,
-                    tooltip="Reset stage to minimum"
+                    tooltip="Reset stage to minimum (Ctrl-R)"
                 ),
                 get_icon_button(
                     ICON_MOVE,
                     key=MOVE_STAGE_BTN,
-                    tooltip="Move stage to target position..."
+                    tooltip="Move stage to target position... (Ctrl-M)"
                 ),
                 get_icon_button(
                     ICON_STOP,
                     key=STOP_CAPTURE_BTN,
-                    tooltip="Stop image capture",
+                    tooltip="Stop image capture (Ctrl-H)",
                     disabled=True
                 ),
                 get_icon_button(
                     ICON_EXPAND,
                     key=OPEN_IN_VIEWER_BTN,
-                    tooltip="Open last captured file in viewer",
+                    tooltip="Open last captured file in viewer (Ctrl-Shift-O)",
                     disabled=True
                 ),
                 sg.pin(sg.ProgressBar(
