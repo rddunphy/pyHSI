@@ -205,9 +205,10 @@ console at the bottom of the window provides feedback on the application's \
 operation.
 
 
-=Controls=
+=Main window=
 
-Overview of the controls available in the control panel.
+Overview of the controls available in the control panel of the main window, \
+used to capture and save images.
 
 ==Camera==
 
@@ -246,8 +247,10 @@ Controls for live preview from camera:
 * Highlight saturated: Highlight light-saturated pixels in red and \
 dark-saturated pixels in blue (not available for pseudocoloured images).
 * Interpolation: Apply linear interpolation to scaled images.
-* Control buttons: Start/stop live preview, rotate preview left or right, \
-clear preview panel.
+* Control buttons:
+    - Start/stop live preview
+    - Rotate preview left or right
+    - Clear preview panel
 
 ==Capture and save==
 
@@ -260,9 +263,20 @@ ENVI standard.
 f-string fields; see File name templates section below for details.
 * Description: Description to include in image metadata. Accepts Python \
 f-string fields; see File name templates section below for details.
-* Control buttons: Capture and save image, reset stage to minimum, move stage \
-to target position, cancel image capture (this should immediately stop the \
-stage from moving).
+* Control buttons:
+    - Capture and save image
+    - Reset stage to minimum
+    - Move stage to target position
+    - Cancel image capture and stop stage
+    - Open the last captured image in the viewer
+
+
+=Viewer window=
+
+Used to view saved HSI files and associated metadata.
+
+* Pseudocolour: Toggle whether to show three bands as RGB image or not.
+* Interpolation: Toggle linear interpolation
 
 
 =Config files=
