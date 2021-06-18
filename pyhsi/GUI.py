@@ -367,11 +367,11 @@ class InterruptableThread(threading.Thread):
             logging.error("Failed to interrupt capture thread")
 
 
-def get_band_slider(key):
+def get_band_slider(key, range=(1, 100), default_value=50):
     """Create slider element for selecting hyperspectral band"""
     return sg.Slider(
-        range=(1, 100),
-        default_value=50,
+        range=range,
+        default_value=default_value,
         orientation="h",
         disable_number_display=True,
         key=key,
@@ -419,6 +419,25 @@ def port_label(port):
     if port.product:
         return f"{port.device}: {port.product}"
     return str(port.device)
+
+
+def resize_img_to_area(img, size, preserve_aspect_ratio=True, interpolation=False):
+    """Resize frame to fill available area in preview panel"""
+    max_w = max(size[0] - 20, 20)
+    max_h = max(size[1] - 20, 20)
+    if preserve_aspect_ratio:
+        old_h = img.shape[0]
+        old_w = img.shape[1]
+        new_w = round(min(max_w, old_w * max_h / old_h))
+        new_h = round(min(max_h, old_h * max_w / old_w))
+    else:
+        new_w = max_w
+        new_h = max_h
+    if interpolation:
+        interp = cv2.INTER_LINEAR
+    else:
+        interp = cv2.INTER_NEAREST
+    return cv2.resize(img, (new_w, new_h), interpolation=interp)
 
 
 ###############################################################################
@@ -528,7 +547,6 @@ class PyHSI:
             while True:
                 timeout = 10 if self.live_preview_active else None
                 window, event, values = sg.read_all_windows(timeout=timeout)
-                logging.debug(f"{window} - {event}")
                 if window is self.window:
                     if event != '__TIMEOUT__':
                         self.handle_event(event, values)
@@ -1006,37 +1024,19 @@ class PyHSI:
             self.clear_preview()
             return
         frame = np.rot90(frame, k=self.live_preview_rotation)
-        frame = self.resize_frame_to_canvas(
-            frame, preserve_aspect_ratio=not waterfall, interpolation=interpolation)
+        frame = resize_img_to_area(
+            frame, self.window[PREVIEW_FRAME].get_size(),
+            preserve_aspect_ratio=not waterfall, interpolation=interpolation)
         if not waterfall and self.camera.wl:
             frame = add_wavelength_labels(frame, self.camera.wl, rot=self.live_preview_rotation)
         frame = cv2.imencode('.png', frame)[1].tobytes()
         self.window[PREVIEW_CANVAS].update(data=frame)
 
-    def resize_frame_to_canvas(self, frame, preserve_aspect_ratio=True, interpolation=False):
-        """Resize frame to fill available area in preview panel"""
-        (max_w, max_h) = self.window[PREVIEW_FRAME].get_size()
-        max_w = max(max_w - 20, 20)
-        max_h = max(max_h - 20, 20)
-        if preserve_aspect_ratio:
-            old_h = frame.shape[0]
-            old_w = frame.shape[1]
-            new_w = round(min(max_w, old_w * max_h / old_h))
-            new_h = round(min(max_h, old_h * max_w / old_w))
-        else:
-            new_w = max_w
-            new_h = max_h
-        if interpolation:
-            interp = cv2.INTER_LINEAR
-        else:
-            interp = cv2.INTER_NEAREST
-        return cv2.resize(frame, (new_w, new_h), interpolation=interp)
-
     def show_captured_preview(self, img, wl):
         """Display a preview of the image that has just been captured"""
         band = img[:, :, len(wl)//2]
         band = np.asarray(band * 255, dtype="uint8")
-        band = self.resize_frame_to_canvas(band)
+        band = resize_img_to_area(band, self.window[PREVIEW_FRAME].get_size())
         band = cv2.imencode('.png', band)[1].tobytes()
         self.window[PREVIEW_CANVAS].update(data=band)
 
@@ -1695,6 +1695,20 @@ class Viewer():
         self.img = envi.open(file_path)
         self.xy_expand_elements = []
         self.x_expand_elements = []
+        self.pseudocolour = True
+        self.single_band = self.img.nbands // 2
+        self.wl = self.img.bands.centers
+        if self.wl:
+            rgb = get_rgb_bands(self.wl)
+        else:
+            logging.warning(f"No valid wavelength data for {self.file_name}")
+            inc = self.img.nbands // 4
+            rgb = (3 * inc, 2 * inc, inc)
+        self.red_band = rgb[0]
+        self.green_band = rgb[1]
+        self.blue_band = rgb[2]
+        self.interpolation = False
+        self.rotation = 0
         content = [
             [
                 sg.Column(
@@ -1718,16 +1732,35 @@ class Viewer():
         )
         self.window.bind("<Control-q>", sg.WINDOW_CLOSE_ATTEMPTED_EVENT)
         self.window.bind("<Control-o>", MENU_OPEN_FILE)
+        self.window.bind("<F1>", MENU_HELP)
 
         for e in self.xy_expand_elements:
             e.expand(expand_x=True, expand_y=True)
         for e in self.x_expand_elements:
             e.expand(expand_x=True, expand_y=False, expand_row=False)
 
+        _, values = self.window.read(timeout=0)
+        self.update_sliders(values)
+
     def handle_event(self, event, values):
         logging.debug(f"Handling {event} event in Viewer({self.file_name})")
         if event == MENU_OPEN_FILE:
             self.root_window.open_file()
+        elif event == MENU_HELP:
+            self.root_window.display_help()
+        elif event == INTERP_CB:
+            self.interpolation = values[INTERP_CB]
+            self.update_view()
+        elif event == PSEUDOCOLOUR_CB:
+            self.set_pseudocolour(values[PSEUDOCOLOUR_CB])
+        elif event in (SINGLE_BAND_SLIDER, RED_BAND_SLIDER, GREEN_BAND_SLIDER, BLUE_BAND_SLIDER):
+            self.update_sliders(values)
+        elif event == ROTLEFT_BTN:
+            self.rotation = (self.rotation + 1) % 4
+            self.update_view()
+        elif event == ROTRIGHT_BTN:
+            self.rotation = (self.rotation - 1) % 4
+            self.update_view()
         elif event in (MENU_QUIT, sg.WINDOW_CLOSE_ATTEMPTED_EVENT, sg.WIN_CLOSED):
             self.exit()
         elif event is None:
@@ -1742,16 +1775,60 @@ class Viewer():
         self.root_window.viewers.pop(self.window)
         self.window.close()
 
+    def update_sliders(self, values):
+        """Update band slider values"""
+        self.single_band = round(values[SINGLE_BAND_SLIDER])
+        self.red_band = round(values[RED_BAND_SLIDER])
+        self.green_band = round(values[GREEN_BAND_SLIDER])
+        self.blue_band = round(values[BLUE_BAND_SLIDER])
+        if self.wl:
+            s_nm = self.wl[self.single_band]
+            r_nm = self.wl[self.red_band]
+            g_nm = self.wl[self.green_band]
+            b_nm = self.wl[self.blue_band]
+            self.window[SINGLE_BAND_NM].update(f"{self.single_band} ({s_nm:.1f} nm)")
+            self.window[RED_BAND_NM].update(f"{self.red_band} ({r_nm:.1f} nm)")
+            self.window[GREEN_BAND_NM].update(f"{self.green_band} ({g_nm:.1f} nm)")
+            self.window[BLUE_BAND_NM].update(f"{self.blue_band} ({b_nm:.1f} nm)")
+        else:
+            self.window[SINGLE_BAND_NM].update(f"{self.single_band}")
+            self.window[RED_BAND_NM].update(f"{self.red_band}")
+            self.window[GREEN_BAND_NM].update(f"{self.green_band}")
+            self.window[BLUE_BAND_NM].update(f"{self.blue_band}")
+        self.update_view()
+
+    def set_pseudocolour(self, pc):
+        """Turn pseudocolour on or off"""
+        if pc != self.pseudocolour:
+            self.pseudocolour = pc
+            self.window[RGB_BAND_PANE].update(visible=pc)
+            self.window[SINGLE_BAND_PANE].update(visible=not pc)
+            self.update_view()
+
+    def update_view(self):
+        """Actually display the image"""
+        if self.pseudocolour:
+            bgr = (self.blue_band, self.green_band, self.red_band)
+            img = self.img.read_bands(bgr)
+        else:
+            img = self.img.read_band(self.single_band)
+        img = np.asarray(img * 255, dtype="uint8")
+        img = np.rot90(img, k=self.rotation)
+        img = resize_img_to_area(img, self.window[VIEW_FRAME].get_size(), interpolation=self.interpolation)
+        img = cv2.imencode('.png', img)[1].tobytes()
+        self.window[VIEW_CANVAS].update(data=img)
+
     def viewer_control_panel(self):
         """View controls"""
         label_pad = (3, 0)
+        slider_range = (0, self.img.nbands - 1)
         control_frame = sg.Frame("View controls", [
             [
                 sg.Checkbox(
                     "Pseudocolour",
                     key=PSEUDOCOLOUR_CB,
                     enable_events=True,
-                    default=True
+                    default=self.pseudocolour
                 )
             ],
             [
@@ -1761,7 +1838,9 @@ class Viewer():
                         size=(6, 1),
                         pad=label_pad
                     ),
-                    get_band_slider(SINGLE_BAND_SLIDER),
+                    get_band_slider(SINGLE_BAND_SLIDER,
+                                    range=slider_range,
+                                    default_value=self.single_band),
                     sg.Text(
                         "--",
                         size=(15, 1),
@@ -1777,7 +1856,9 @@ class Viewer():
                             size=(6, 1),
                             pad=label_pad
                         ),
-                        get_band_slider(RED_BAND_SLIDER),
+                        get_band_slider(RED_BAND_SLIDER,
+                                        range=slider_range,
+                                        default_value=self.red_band),
                         sg.Text(
                             "--",
                             size=(15, 1),
@@ -1790,7 +1871,9 @@ class Viewer():
                             size=(6, 1),
                             pad=label_pad
                         ),
-                        get_band_slider(GREEN_BAND_SLIDER),
+                        get_band_slider(GREEN_BAND_SLIDER,
+                                        range=slider_range,
+                                        default_value=self.green_band),
                         sg.Text(
                             "--",
                             size=(15, 1),
@@ -1803,7 +1886,9 @@ class Viewer():
                             size=(6, 1),
                             pad=label_pad
                         ),
-                        get_band_slider(BLUE_BAND_SLIDER),
+                        get_band_slider(BLUE_BAND_SLIDER,
+                                        range=slider_range,
+                                        default_value=self.blue_band),
                         sg.Text(
                             "--",
                             size=(15, 1),
@@ -1816,7 +1901,8 @@ class Viewer():
                 sg.Checkbox(
                     "Interpolation",
                     key=INTERP_CB,
-                    enable_events=True
+                    enable_events=True,
+                    default=self.interpolation
                 )
             ],
             [
