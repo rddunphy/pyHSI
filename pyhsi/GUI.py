@@ -125,6 +125,7 @@ RGB_BAND_PANE = "RGBBandControlPane"
 INTERP_CB = "InterpolationCheckbox"
 ROTLEFT_BTN = "RotateLeftButton"
 ROTRIGHT_BTN = "RotateRightButton"
+METADATA_DESCRIPTION = "MetadataDescriptionMultiline"
 
 
 ###############################################################################
@@ -557,7 +558,7 @@ class PyHSI:
                         viewer = self.viewers[window]
                         viewer.handle_event(event, values)
                     except KeyError:
-                        logging.debug("Event in unknown window {window}")
+                        logging.debug(f"Event in unknown window {window}")
         except KeyboardInterrupt:
             logging.error("Received KeyboardInterrupt")
             self.exit(force=True)
@@ -1821,6 +1822,7 @@ class Viewer():
     def viewer_control_panel(self):
         """View controls"""
         label_pad = (3, 0)
+        label_size = (18, 1)
         slider_range = (0, self.img.nbands - 1)
         control_frame = sg.Frame("View controls", [
             [
@@ -1918,7 +1920,49 @@ class Viewer():
                 )
             ]
         ])
-        return [[control_frame]]
+        metadata = self.get_metadata_entries()
+        layout = [
+            [sg.Text(k, pad=label_pad, size=label_size), sg.Text(v)] for (k, v) in metadata
+        ]
+        if 'description' in self.img.metadata:
+            description_multiline = sg.Multiline(
+                self.img.metadata['description'],
+                size=(30, 3),
+                key=METADATA_DESCRIPTION,
+                disabled=True
+            )
+            layout += [[sg.Text("Description", pad=label_pad, size=label_size), description_multiline]]
+            self.x_expand_elements.append(description_multiline)
+        metadata_frame = sg.Frame("Metadata", layout)
+        self.x_expand_elements.extend((control_frame, metadata_frame))
+        return [[control_frame], [metadata_frame]]
+
+    def get_metadata_entries(self):
+        """Returns list of available metadata entries to display"""
+        md = [
+            ("Header file", self.file_name),
+            ("Data file", os.path.basename(self.img.filename)),
+            ("Number of bands", str(self.img.nbands)),
+            ("Number of columns", str(self.img.ncols)),
+            ("Number of frames", str(self.img.nrows)),
+        ]
+        if self.wl:
+            md += [("Wavelengths", f"{self.wl[0]}-{self.wl[-1]} nm")]
+        md += [("Sample size", str(self.img.sample_size))]
+        if 'interleave' in self.img.metadata:
+            md += [("Interleave", self.img.metadata['interleave'].upper())]
+        if 'data type' in self.img.metadata:
+            md += [("Data type", f"{self.img.metadata['data type']} ({self.img.asarray().dtype})")]
+        else:
+            md += [("Data type", str(self.img.asarray().dtype))]
+        md += [
+            ("Byte order", str(self.img.byte_order)),
+            ("Header offset", str(self.img.offset)),
+            ("Scale factor", str(self.img.scale_factor))
+        ]
+        if 'acquisition time' in self.img.metadata:
+            md += [("Acquisition time", self.img.metadata['acquisition time'])]
+        return md
 
     def view_panel(self):
         """Create layout for the view panel"""
