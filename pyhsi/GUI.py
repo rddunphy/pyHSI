@@ -431,6 +431,7 @@ class PyHSI:
 
     def __init__(self, debug=False):
         self.debug = debug
+        self.viewers = {}
         self.default_folder = os.environ['HOME']
         self.xy_expand_elements = []
         self.x_expand_elements = []
@@ -526,28 +527,42 @@ class PyHSI:
         try:
             while True:
                 timeout = 10 if self.live_preview_active else None
-                event, values = self.window.read(timeout=timeout)
-                if event != '__TIMEOUT__':
-                    self.handle_event(event, values)
-                elif self.live_preview_active:
-                    self.next_live_preview_frame(values)
+                window, event, values = sg.read_all_windows(timeout=timeout)
+                logging.debug(f"{window} - {event}")
+                if window is self.window:
+                    if event != '__TIMEOUT__':
+                        self.handle_event(event, values)
+                    elif self.live_preview_active:
+                        self.next_live_preview_frame(values)
+                else:
+                    try:
+                        viewer = self.viewers[window]
+                        viewer.handle_event(event, values)
+                    except KeyError:
+                        logging.debug("Event in unknown window {window}")
         except KeyboardInterrupt:
             logging.error("Received KeyboardInterrupt")
-            raise
-        except Exception:
-            logging.exception("Top level exception")
-            raise
+            self.exit(force=True)
+        except Exception as e:
+            logging.exception(f"Fatal exception: {e}")
+            self.exit(force=True)
 
-    def exit(self):
+    def exit(self, force=False):
         """Exit application"""
-        if self.live_preview_active or self.capture_thread is not None:
+        if not force and (self.live_preview_active or
+                          self.capture_thread is not None):
             msg = "Are you sure you want to exit PyHSI?"
             if not self.confirm_popup("Confirm exit", msg):
                 return
-            if self.live_preview_active:
-                self.stop_live_preview()
-            if self.capture_thread is not None:
-                self.stop_capture()
+        if self.live_preview_active:
+            self.stop_live_preview()
+        if self.capture_thread is not None:
+            self.stop_capture()
+        open_viewers = list(self.viewers.values())
+        if open_viewers:
+            logging.debug(f"Closing {len(open_viewers)} open viewer(s)...")
+            for viewer in open_viewers:
+                viewer.exit()
         logging.info("Exiting PyHSI")
         self.window.close()
         sys.exit()
@@ -626,6 +641,11 @@ class PyHSI:
         elif event == MENU_ABOUT:
             self.display_about()
         elif event in (MENU_QUIT, sg.WINDOW_CLOSE_ATTEMPTED_EVENT):
+            self.exit()
+        elif event is None:
+            # With multiple windows, close attempt causes None event, see
+            # https://github.com/PySimpleGUI/PySimpleGUI/issues/3771
+            logging.debug("Treating None event as sg.WINDOW_CLOSE_ATTEMPTED_EVENT")
             self.exit()
 
     def validate(self, field):
@@ -822,7 +842,8 @@ class PyHSI:
         logging.info(f"Opening {file_path}")
         ws = self.window.size
         size = (round(ws[0] * 0.7), round(ws[1] * 0.7))
-        Viewer(file_path, size)
+        viewer = Viewer(self, file_path, size)
+        self.viewers[viewer.window] = viewer
 
     def setup_stage(self, values):
         """Connect to stage - returns True if successful, False otherwise"""
@@ -1084,6 +1105,7 @@ class PyHSI:
 
     def stop_capture(self):
         """Immediately stop stage and interrupt capture thread"""
+        logging.debug("Aborting capture thread")
         self.stage.stop()
         self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
         self.window[STOP_CAPTURE_BTN].update(disabled=True)
@@ -1129,11 +1151,12 @@ class PyHSI:
                 file_name = template_to_file_name(
                     values[OUTPUT_FOLDER], values[SAVE_FILE], fields, '.hdr')
                 description = values[IMAGE_DESCRIPTION_INPUT].format(**fields)
+                description = description.strip()
             except KeyError as e:
                 fs = ", ".join(fields.keys())
                 msg = f"{{{e}}} is not a valid field name (choose from {fs})"
                 raise ValueError(msg)
-            logging.debug(f"Capturing image with file_name={file_name} and description={description}")
+            logging.debug(f"Capturing image with file_name='{file_name}' and description='{description}'")
             [img, md] = self.camera.capture_save(
                 file_name, self.stage, vals['ranges'], vals['velocity'],
                 flip=vals['flip'], verbose=True, description=description,
@@ -1662,11 +1685,13 @@ class PyHSI:
         return [[camera_frame], [stage_frame], [preview_frame], [output_frame]]
 
 
-class Viewer:
+class Viewer():
     """Window for viewing existing HSI files"""
 
-    def __init__(self, file_path, size):
+    def __init__(self, root_window, file_path, size):
+        self.root_window = root_window
         self.file_path = file_path
+        self.file_name = os.path.basename(file_path)
         self.img = envi.open(file_path)
         self.xy_expand_elements = []
         self.x_expand_elements = []
@@ -1685,17 +1710,37 @@ class Viewer:
             ]
         ]
         self.window = sg.Window(
-            title=f"PyHSI - {os.path.basename(file_path)}",
+            title=f"PyHSI - {self.file_name}",
             layout=content,
             resizable=True,
             size=size,
             finalize=True
         )
+        self.window.bind("<Control-q>", sg.WINDOW_CLOSE_ATTEMPTED_EVENT)
+        self.window.bind("<Control-o>", MENU_OPEN_FILE)
 
         for e in self.xy_expand_elements:
             e.expand(expand_x=True, expand_y=True)
         for e in self.x_expand_elements:
             e.expand(expand_x=True, expand_y=False, expand_row=False)
+
+    def handle_event(self, event, values):
+        logging.debug(f"Handling {event} event in Viewer({self.file_name})")
+        if event == MENU_OPEN_FILE:
+            self.root_window.open_file()
+        elif event in (MENU_QUIT, sg.WINDOW_CLOSE_ATTEMPTED_EVENT, sg.WIN_CLOSED):
+            self.exit()
+        elif event is None:
+            # With multiple windows, close attempt causes None event, see
+            # https://github.com/PySimpleGUI/PySimpleGUI/issues/3771
+            logging.debug("Treating None event as sg.WINDOW_CLOSE_ATTEMPTED_EVENT")
+            self.exit()
+
+    def exit(self):
+        """Close the viewer window"""
+        logging.debug(f"Closing viewer window ({self.file_name})")
+        self.root_window.viewers.pop(self.window)
+        self.window.close()
 
     def viewer_control_panel(self):
         """View controls"""
