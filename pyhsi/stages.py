@@ -185,7 +185,9 @@ class MockStage:
         self.length = length
         self.max_velocity = max_velocity
         self._moving_until = 0
+        self._moving_since = 0
         self._moving_v = 0
+        self._target_pos = 0
         self._pos = 0
 
     def get_position(self):
@@ -210,8 +212,15 @@ class MockStage:
         return timeit.default_timer() < self._moving_until
 
     def stop(self):
-        self.moving_until = 0
-        logging.info("Stopping translation stage")
+        if self.is_moving():
+            logging.info("Stopping translation stage")
+            self._moving_until = 0
+            d = self._v * (timeit.default_timer() - self._moving_since)
+            if self._target_pos > self._pos:
+                self._pos += d
+            else:
+                self._pos -= d
+            logging.debug(f"Stage at position {self._pos}")
 
     def set_velocity(self, velocity):
         """Set the velocity for subsequent calls to `move_to()`.
@@ -243,11 +252,24 @@ class MockStage:
         old_v = self._v
         if velocity:
             self.set_velocity(velocity)
+        logging.debug("Starting stage move...")
         sleep_time = abs(self._pos - target) / self._v
-        self._moving_until = timeit.default_timer() + sleep_time
+        self._moving_since = timeit.default_timer()
+        self._moving_until = self._moving_since + sleep_time
         self._moving_v = self._v
-        if (block):
-            time.sleep(sleep_time)
-        self._pos = target
+        self._target_pos = target
+        if block:
+            while timeit.default_timer() < self._moving_until:
+                pass
+            d = self._v * (timeit.default_timer() - self._moving_since)
+            if target > self._pos:
+                self._pos += d
+            else:
+                self._pos -= d
+        else:
+            # Can't properly simulate distance travelled without blocking,
+            # so just assume we reached the target
+            self._pos = target
+        logging.debug(f"Stage at position {self._pos}")
         if self._v != old_v:
             self.set_velocity(old_v)

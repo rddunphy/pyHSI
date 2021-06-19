@@ -382,7 +382,7 @@ class InterruptableThread(threading.Thread):
         thread_id = self.get_id()
         logging.debug(f"Interrupting thread {thread_id}")
         res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
-            ctypes.c_long(thread_id), ctypes.py_object(SystemExit))
+            ctypes.c_long(thread_id), ctypes.py_object(KeyboardInterrupt))
         if res > 1:
             ctypes.pythonapi.PyThreadState_SetAsyncExc(
                 ctypes.c_long(thread_id), 0)
@@ -987,6 +987,9 @@ class PyHSI:
 
     def start_live_preview(self, values):
         """Start preview from connected camera"""
+        if self.window[PREVIEW_BTN].Disabled:
+            logging.debug("Trying to start preview, but button is disabled")
+            return
         try:
             logging.debug("Starting live preview")
             self.setup_camera(values)
@@ -1078,28 +1081,36 @@ class PyHSI:
 
     def capture_image(self, values):
         """Start capturing image in new thread"""
-        self.capture_thread = InterruptableThread(
-            target=self.capture_image_thread, args=(values,))
-        self.capture_thread.start()
+        if self.live_preview_active:
+            self.stop_live_preview()
+        if self.capture_thread is None:
+            self.capture_thread = InterruptableThread(
+                target=self.capture_image_thread, args=(values,))
+            self.capture_thread.start()
+        else:
+            logging.debug("Can't capture image because capture_thread is already in use")
 
     def move_stage(self, values):
         """Move stage to position specified in a popup"""
-        e, v = self.popup("Move stage", [
-            [
-                sg.Text("Target position"),
-                sg.Input(key="target", size=(6, 1)),
-                sg.Text("mm")
-            ],
-            [sg.Ok(), sg.Cancel()]
-        ])
-        if e == "Ok":
-            target = self.parse_numeric(v["target"], float, 0, 196, None)
-            if target is None:
-                logging.error("Invalid input - should be float between 0.0 and 196.0")
-            else:
-                self.capture_thread = InterruptableThread(
-                    target=self.move_stage_thread, args=(values, target))
-                self.capture_thread.start()
+        if self.capture_thread is None:
+            e, v = self.popup("Move stage", [
+                [
+                    sg.Text("Target position"),
+                    sg.Input(key="target", size=(6, 1)),
+                    sg.Text("mm")
+                ],
+                [sg.Ok(), sg.Cancel()]
+            ])
+            if e == "Ok":
+                target = self.parse_numeric(v["target"], float, 0, 196, None)
+                if target is None:
+                    logging.error("Invalid input - should be float between 0.0 and 196.0")
+                else:
+                    self.capture_thread = InterruptableThread(
+                        target=self.move_stage_thread, args=(values, target))
+                    self.capture_thread.start()
+        else:
+            logging.debug("Can't move stage because capture_thread is already in use")
 
     def move_stage_thread(self, values, target):
         """Move stage to target specified in mm (uses capture_thread field)"""
@@ -1119,9 +1130,12 @@ class PyHSI:
 
     def reset_stage(self, values):
         """Start resetting stage in new thread"""
-        self.capture_thread = InterruptableThread(
-            target=self.reset_stage_thread, args=(values,))
-        self.capture_thread.start()
+        if self.capture_thread is None:
+            self.capture_thread = InterruptableThread(
+                target=self.reset_stage_thread, args=(values,))
+            self.capture_thread.start()
+        else:
+            logging.debug("Can't reset stage because capture_thread is already in use")
 
     def reset_stage_thread(self, values):
         """Reset stage to minimum (uses capture_thread field)"""
