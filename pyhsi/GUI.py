@@ -2016,7 +2016,23 @@ class Viewer():
             ]
         ])
         metadata = self.get_metadata_entries()
-        layout = [
+        layout = [[
+            sg.Column([[
+                sg.Text("Header file", pad=label_pad, size=label_size),
+                sg.Text(self.file_name)
+            ]]),
+            sg.Column([[
+                get_icon_button(
+                    ICON_BROWSER,
+                    key=OPEN_FOLDER_IN_BROWSER,
+                    tooltip="Open folder in file explorer"),
+                get_icon_button(
+                    ICON_FILE,
+                    key=OPEN_HEADER_FILE_IN_EDITOR,
+                    tooltip="Open header file in text editor")
+            ]], element_justification="right", expand_x=True)
+        ]]
+        layout += [
             [sg.Text(k, pad=label_pad, size=label_size), sg.Text(v)] for (k, v) in metadata
         ]
         if 'description' in self.img.metadata:
@@ -2028,16 +2044,6 @@ class Viewer():
             )
             layout += [[sg.Text("Description", pad=label_pad, size=label_size), description_multiline]]
             self.x_expand_elements.append(description_multiline)
-        layout += [[
-            get_icon_button(
-                ICON_BROWSER,
-                key=OPEN_FOLDER_IN_BROWSER,
-                tooltip="Open folder in file explorer"),
-            get_icon_button(
-                ICON_FILE,
-                key=OPEN_HEADER_FILE_IN_EDITOR,
-                tooltip="Open header file in text editor")
-        ]]
         metadata_frame = sg.Frame("Metadata", layout)
         self.x_expand_elements.extend((control_frame, metadata_frame))
         return [[control_frame], [metadata_frame]]
@@ -2045,7 +2051,6 @@ class Viewer():
     def get_metadata_entries(self):
         """Returns list of available metadata entries to display"""
         md = [
-            ("Header file", self.file_name),
             ("Data file", os.path.basename(self.img.filename)),
             ("Number of bands", str(self.img.nbands)),
             ("Number of columns", str(self.img.ncols)),
@@ -2085,6 +2090,7 @@ class CalibrationDialog:
         self.img = img
         self.root_window = root
         i1, i2 = find_white_frames(self.img.asarray())
+        output_name = os.path.splitext(file_name)[0] + "_calibrated.hdr"
         layout = [
             [
                 sg.Column([
@@ -2125,7 +2131,7 @@ class CalibrationDialog:
             ],
             [
                 sg.Text("Save as", pad=(3, 0), size=(15, 1)),
-                sg.Input(file_name, key="SavePath", size=(25, 1)),
+                sg.Input(output_name, key="SavePath", size=(25, 1)),
                 get_icon_button(
                     ICON_OPEN,
                     button_type=sg.BUTTON_TYPE_SAVEAS_FILE,
