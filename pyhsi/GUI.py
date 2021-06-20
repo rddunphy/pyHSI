@@ -1882,58 +1882,8 @@ class Viewer():
             self.update_view()
 
     def calibrate(self):
-        """Perform one-point calibration"""
-        i1, i2 = find_white_frames(self.img.asarray())
-        w = sg.Window("Calibration", [[
-            sg.Text("Dark reference image"),
-            sg.Input("", key="DarkRefPath"),
-            get_icon_button(
-                ICON_OPEN,
-                button_type=sg.BUTTON_TYPE_BROWSE_FILE,
-                file_types=(("ENVI", "*.hdr"),),
-                initial_folder=self.root_window.default_folder,
-                tooltip="Browse..."
-            )
-        ],[
-            sg.Text("Calibration tile"),
-            sg.Slider(
-                range=(0, self.img.nrows),
-                default_value=i1,
-                key="Slider_i1",
-                orientation="h"
-            )
-        ],[
-            sg.Slider(
-                range=(0, self.img.nrows),
-                default_value=i2,
-                key="Slider_i2",
-                orientation="h"
-            )
-        ],[
-            sg.Text("Save as"),
-            sg.Input("", key="SavePath"),
-            get_icon_button(
-                ICON_OPEN,
-                button_type=sg.BUTTON_TYPE_SAVEAS_FILE,
-                file_types=(("ENVI", "*.hdr"),),
-                initial_folder=self.root_window.default_folder,
-                tooltip="Browse..."
-            )
-        ],[
-            sg.Ok(), sg.Cancel()
-        ]], finalize=True)
-        e, v = w.read(close=True)
-        if e == "Ok":
-            i1 = int(v["Slider_i1"])
-            i2 = int(v["Slider_i2"])
-            S = self.img.asarray()
-            W = S[i1:i2, :, :]
-            d_img = envi.open(v["DarkRefPath"])
-            D = d_img.asarray()
-            X = one_point_calibration(S, W, D, scale_factor=self.img.scale_factor)
-            envi.save_image(v["SavePath"], X, dtype='uint16', ext='.raw',
-                            metadata=self.img.metadata, force=True)
-            self.root_window.open_file(file_path=v["SavePath"])
+        w = CalibrationDialog(self.img, self.root_window, self.file_name)
+        w.run()
 
     def update_view(self):
         """Actually display the image"""
@@ -1949,6 +1899,7 @@ class Viewer():
         self.window[VIEW_CANVAS].update(data=img)
 
     def open_file_externally(self, file_path):
+        """Open file/folder in external application"""
         if sg.running_windows():
             os.startfile(file_path)
         elif sg.running_mac():
@@ -2126,3 +2077,114 @@ class Viewer():
         ]], key=VIEW_FRAME)
         self.xy_expand_elements.append(frame)
         return [[frame]]
+
+
+class CalibrationDialog:
+
+    def __init__(self, img, root, file_name):
+        self.img = img
+        self.root_window = root
+        i1, i2 = find_white_frames(self.img.asarray())
+        layout = [
+            [
+                sg.Column([
+                    [
+                        sg.Text("Calibration tile")
+                    ],
+                    [
+                        sg.Slider(
+                            range=(self.img.nrows, 0),
+                            default_value=i1,
+                            key="Slider_i1",
+                            orientation="v",
+                            enable_events=True
+                        ),
+                        sg.Slider(
+                            range=(self.img.nrows, 0),
+                            default_value=i2,
+                            key="Slider_i2",
+                            orientation="v",
+                            enable_events=True
+                        )
+                    ]
+                ]),
+                sg.Column([[
+                    sg.Image(key="Image", size=(self.img.nrows, self.img.ncols))
+                ]])
+            ],
+            [
+                sg.Text("Dark reference", pad=(3, 0), size=(15, 1)),
+                sg.Input("", key="DarkRefPath", size=(25, 1)),
+                get_icon_button(
+                    ICON_OPEN,
+                    button_type=sg.BUTTON_TYPE_BROWSE_FILE,
+                    file_types=(("ENVI", "*.hdr"),),
+                    initial_folder=self.root_window.default_folder,
+                    tooltip="Browse..."
+                )
+            ],
+            [
+                sg.Text("Save as", pad=(3, 0), size=(15, 1)),
+                sg.Input(file_name, key="SavePath", size=(25, 1)),
+                get_icon_button(
+                    ICON_OPEN,
+                    button_type=sg.BUTTON_TYPE_SAVEAS_FILE,
+                    file_types=(("ENVI", "*.hdr"),),
+                    initial_folder=self.root_window.default_folder,
+                    tooltip="Browse..."
+                )
+            ],
+            [
+                sg.Ok(), sg.Cancel()
+            ]
+        ]
+        self.window = sg.Window(
+            "One-point calibration",
+            layout,
+            modal=True,
+            keep_on_top=True,
+            finalize=True
+        )
+        self.update_frames(i1, i2)
+
+    def run(self):
+        while True:
+            e, v = self.window.read()
+            if e == "Ok":
+                self.calibrate(v)
+                break
+            elif e in ("Slider_i1", "Slider_i2"):
+                self.update_frames(int(v["Slider_i1"]), int(v["Slider_i2"]))
+            else:  # Cancel, window closed, etc.
+                break
+        self.window.close()
+
+    def update_frames(self, i1, i2):
+        """Update image to show the selected frames with red lines"""
+        img = self.img.read_band(self.img.nbands // 2)
+        img = np.ascontiguousarray(img * 255, dtype="uint8")
+        img = np.repeat(img[:, :, np.newaxis], 3, axis=2)
+        x = img.shape[1] - 1
+        img = cv2.line(img, (0, i1), (x, i1), (0, 0, 255), 1)
+        img = cv2.line(img, (0, i2), (x, i2), (0, 0, 255), 1)
+        overlay = np.zeros(img.shape, np.uint8)
+        overlay = cv2.rectangle(overlay, (0, i1), (x, i2), (0, 0, 255), -1)
+        img = cv2.addWeighted(overlay, 0.1, img, 0.9, 0)
+        img = cv2.imencode('.png', img)[1].tobytes()
+        self.window["Image"].update(data=img)
+
+    def calibrate(self, v):
+        """Perform one-point calibration"""
+        i1 = int(v["Slider_i1"])
+        i2 = int(v["Slider_i2"])
+        S = self.img.asarray()
+        W = S[i1:i2, :, :]
+        try:
+            d_img = envi.open(v["DarkRefPath"])
+            D = d_img.asarray()
+            X = one_point_calibration(S, W, D, scale_factor=self.img.scale_factor)
+            envi.save_image(v["SavePath"], X, dtype='uint16', ext='.raw',
+                            metadata=self.img.metadata, force=True)
+            self.root_window.open_file(file_path=v["SavePath"])
+        except Exception as e:
+            logging.error(f"Error calibrating image: {e}")
