@@ -8,9 +8,36 @@ from pyhsi.GUI import PyHSI
 
 def main(args):
     parser = argparse.ArgumentParser(description="Launch PyHSI GUI")
-    parser.add_argument('-d', '--debug', action='store_true', help="print debug information to console")
+    parser.add_argument(
+        '-d', '--debug', action='store_true',
+        help="print debug information to console"
+    )
+    parser.add_argument(
+        '-c', '--config', default=None, type=argparse.FileType('r'),
+        help="configuration file to load"
+    )
+    parser.add_argument(
+        '-f', '--file', default=None, type=argparse.FileType('r'),
+        help="ENVI file to open in viewer"
+    )
     opts = parser.parse_args(args)
-    app = PyHSI(debug=opts.debug)
+    if opts.config is not None:
+        opts.config.close()
+        config = opts.config.name
+        if not config.endswith('.phc'):
+            sys.stderr.write("Configuration file should be of type *.phc\n")
+            sys.exit(1)
+    else:
+        config = None
+    if opts.file is not None:
+        opts.file.close()
+        start_file = opts.file.name
+        if not start_file.endswith('.hdr'):
+            sys.stderr.write("Can currently only load files of type *.hdr\n")
+            sys.exit(1)
+    else:
+        start_file = None
+    app = PyHSI(debug=opts.debug, config=config, start_file=start_file)
     app.run()
 
 

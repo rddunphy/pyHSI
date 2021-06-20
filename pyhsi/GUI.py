@@ -473,7 +473,7 @@ def resize_img_to_area(img, size, preserve_aspect_ratio=True, interpolation=Fals
 class PyHSI:
     """Root window for capturing images"""
 
-    def __init__(self, debug=False):
+    def __init__(self, debug=False, config=None, start_file=None):
         self.debug = debug
         self.viewers = {}
         self.default_folder = os.environ['HOME']
@@ -569,10 +569,19 @@ class PyHSI:
         logging.debug(f"Window size: {self.window.size}")
 
         # Load default configuration
-        if os.path.isfile(DEFAULT_CONFIG_PATH):
-            self.load_config(config_file=DEFAULT_CONFIG_PATH)
+        if config is None:
+            if os.path.isfile(DEFAULT_CONFIG_PATH):
+                self.load_config(config_file=DEFAULT_CONFIG_PATH)
+            else:
+                logging.debug(f"No default configuration file at {DEFAULT_CONFIG_PATH}")
         else:
-            logging.debug(f"No default configuration file at {DEFAULT_CONFIG_PATH}")
+            if os.path.isfile(config):
+                self.load_config(config_file=config)
+            else:
+                logging.error(f"No configuration file at {config}")
+
+        if start_file is not None:
+            self.open_file(start_file)
 
     def run(self):
         """Main event loop - events handled in `handle_event`"""
@@ -848,21 +857,21 @@ class PyHSI:
         try:
             with open(config_file, 'r') as f:
                 config = json.load(f)
-                v = config[APP_VERSION]
-                if v not in CONFIG_COMPAT_VERSIONS:
-                    msg = (f"Configuration file version {v} incompatible ",
-                           f"with PyHSI v{__version__} for {config_file}")
-                    raise IOError(msg)
-                for key in CONFIG_KEYS:
-                    if key in config and key != APP_VERSION:
-                        self.window[key].update(value=config[key])
-                for key in config.keys():
-                    if key not in CONFIG_KEYS:
-                        logging.warning(f"Unknown key {key} in config file")
-                logging.info(f"Loaded configuration from {config_file}")
-                self.update_view()
-                if OUTPUT_FOLDER in config:
-                    self.set_default_folder(config[OUTPUT_FOLDER])
+            v = config[APP_VERSION]
+            if v not in CONFIG_COMPAT_VERSIONS:
+                msg = (f"Configuration file version {v} incompatible ",
+                       f"with PyHSI v{__version__} for {config_file}")
+                raise IOError(msg)
+            for key in CONFIG_KEYS:
+                if key in config and key != APP_VERSION:
+                    self.window[key].update(value=config[key])
+            for key in config.keys():
+                if key not in CONFIG_KEYS:
+                    logging.warning(f"Unknown key {key} in config file")
+            logging.info(f"Loaded configuration from {config_file}")
+            self.update_view()
+            if OUTPUT_FOLDER in config:
+                self.set_default_folder(config[OUTPUT_FOLDER])
         except (IOError, JSONDecodeError) as e:
             logging.exception(f"Unable to read config file: {e}")
 
