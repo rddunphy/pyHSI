@@ -20,6 +20,7 @@ import tkinter as tk
 
 from . import __version__
 from .cameras import BaslerCamera, MockCamera
+from .preprocessing import find_white_frames, one_point_calibration
 from .stages import TSA200, MockStage
 from .utils import get_rgb_bands, add_wavelength_labels
 
@@ -130,6 +131,7 @@ ROTRIGHT_BTN = "RotateRightButton"
 METADATA_DESCRIPTION = "MetadataDescriptionMultiline"
 OPEN_FOLDER_IN_BROWSER = "OpenFolderInFileBrowser"
 OPEN_HEADER_FILE_IN_EDITOR = "OpenHeaderFileInEditor"
+CALIBRATE_BTN = "CalibrateImageButton"
 
 
 ###############################################################################
@@ -153,6 +155,7 @@ ICON_MOVE = "move"
 ICON_EXPAND = "expand"
 ICON_FILE = "file"
 ICON_BROWSER = "browser"
+ICON_CALIBRATE = "calibrate"
 
 
 ###############################################################################
@@ -1819,6 +1822,8 @@ class Viewer():
         elif event == ROTRIGHT_BTN:
             self.rotation = (self.rotation - 1) % 4
             self.update_view()
+        elif event == CALIBRATE_BTN:
+            self.calibrate()
         elif event == OPEN_FOLDER_IN_BROWSER:
             self.open_file_externally(os.path.dirname(self.file_path))
         elif event == OPEN_HEADER_FILE_IN_EDITOR:
@@ -1866,6 +1871,60 @@ class Viewer():
             self.window[RGB_BAND_PANE].update(visible=pc)
             self.window[SINGLE_BAND_PANE].update(visible=not pc)
             self.update_view()
+
+    def calibrate(self):
+        """Perform one-point calibration"""
+        i1, i2 = find_white_frames(self.img.asarray())
+        w = sg.Window("Calibration", [[
+            sg.Text("Dark reference image"),
+            sg.Input("", key="DarkRefPath"),
+            get_icon_button(
+                ICON_OPEN,
+                button_type=sg.BUTTON_TYPE_BROWSE_FILE,
+                file_types=(("ENVI", "*.hdr"),),
+                initial_folder=self.root_window.default_folder,
+                tooltip="Browse..."
+            )
+        ],[
+            sg.Text("Calibration tile"),
+            sg.Slider(
+                range=(0, self.img.nrows),
+                default_value=i1,
+                key="Slider_i1",
+                orientation="h"
+            )
+        ],[
+            sg.Slider(
+                range=(0, self.img.nrows),
+                default_value=i2,
+                key="Slider_i2",
+                orientation="h"
+            )
+        ],[
+            sg.Text("Save as"),
+            sg.Input("", key="SavePath"),
+            get_icon_button(
+                ICON_OPEN,
+                button_type=sg.BUTTON_TYPE_SAVEAS_FILE,
+                file_types=(("ENVI", "*.hdr"),),
+                initial_folder=self.root_window.default_folder,
+                tooltip="Browse..."
+            )
+        ],[
+            sg.Ok(), sg.Cancel()
+        ]], finalize=True)
+        e, v = w.read(close=True)
+        if e == "Ok":
+            i1 = int(v["Slider_i1"])
+            i2 = int(v["Slider_i2"])
+            S = self.img.asarray()
+            W = S[i1:i2, :, :]
+            d_img = envi.open(v["DarkRefPath"])
+            D = d_img.asarray()
+            X = one_point_calibration(S, W, D, scale_factor=self.img.scale_factor)
+            envi.save_image(v["SavePath"], X, dtype='uint16', ext='.raw',
+                            metadata=self.img.metadata, force=True)
+            self.root_window.open_file(file_path=v["SavePath"])
 
     def update_view(self):
         """Actually display the image"""
@@ -1988,6 +2047,11 @@ class Viewer():
                     ICON_ROT_RIGHT,
                     key=ROTRIGHT_BTN,
                     tooltip="Rotate view right"
+                ),
+                get_icon_button(
+                    ICON_CALIBRATE,
+                    key=CALIBRATE_BTN,
+                    tooltip="Perform one-point calibration of image"
                 )
             ]
         ])
