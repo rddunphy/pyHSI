@@ -354,10 +354,6 @@ class InterruptableThread(threading.Thread):
 
     def __init__(self, target=None, args=None):
         threading.Thread.__init__(self, target=target, args=args, daemon=True)
-        for id, thread in threading._active.items():
-            if thread is self:
-                self._thread_id = id
-                logging.debug("huh")
 
     def get_id(self):
         if hasattr(self, '_thread_id'):
@@ -368,6 +364,9 @@ class InterruptableThread(threading.Thread):
 
     def interrupt(self):
         thread_id = self.get_id()
+        if thread_id is None:
+            logging.warning("Can't find id of thread to interrupt")
+            return
         logging.debug(f"Interrupting thread {thread_id}")
         res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
             ctypes.c_long(thread_id), ctypes.py_object(SystemExit))
@@ -1127,7 +1126,6 @@ class PyHSI:
         self.window[MOVE_STAGE_BTN].update(disabled=False)
         self.window[PREVIEW_BTN].update(disabled=False)
         self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
-        logging.debug(f"{self.capture_thread.get_id()=}")
         self.capture_thread.interrupt()
         self.capture_thread = None
 
