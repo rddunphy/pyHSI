@@ -270,6 +270,9 @@ class MockStage:
             # Can't properly simulate distance travelled without blocking,
             # so just assume we reached the target
             self._pos = target
-        logging.debug(f"Stage at position {self._pos}")
+        # try:
+        #     logging.debug(f"Stage at position {self._pos}")
+        # except Exception as e:
+        #     print(e)
         if self._v != old_v:
             self.set_velocity(old_v)

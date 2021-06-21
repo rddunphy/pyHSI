@@ -3,7 +3,8 @@
 import argparse
 import sys
 
-from pyhsi.GUI import PyHSI
+# from pyhsi.GUI import PyHSI
+from pyhsi.gui.main import PyHSI
 
 
 def main(args):

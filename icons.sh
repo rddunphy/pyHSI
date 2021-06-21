@@ -2,7 +2,7 @@
 
 declare -a icons=("camera" "delete" "pause" "open" "play" "reload" "rotate-left"
 	"rotate-right" "stop" "reset" "move" "browser" "expand" "file" "calibrate"
-	"cube")
+	"cube" "crop")
 
 size=25
 size_hidpi=40
@@ -14,7 +14,7 @@ for f in ${icons[@]}; do
 done
 
 echo -e "\nConverting application icon to png..."
-inkscape -e icons/pyhsi.png -h 256 -w 256 icons/pyhsi.svg
+inkscape -o icons/pyhsi.png -h 256 -w 256 icons/pyhsi.svg
 
 echo -e "\nConverting application icon to ico..."
 mkdir tmp
