@@ -1887,7 +1887,8 @@ class Viewer():
             self.update_view()
 
     def calibrate(self):
-        w = CalibrationDialog(self.img, self.root_window, self.file_name)
+        """Open a calibration dialog for this image"""
+        w = CalibrationDialog(self.img, self.root_window, self.file_path)
         w.run()
 
     def display_hypercube(self):
@@ -2093,7 +2094,7 @@ class Viewer():
         if 'acquisition time' in self.img.metadata:
             try:
                 acq_time = dateutil.parser.isoparse(self.img.metadata['acquisition time'])
-                md += [("Acquisition time", acq_time.strftime("%a, %d/%m/%Y %T (%z)"))]
+                md += [("Acquisition time", acq_time.strftime("%a, %-d %b %Y, %T"))]
             except ValueError as e:
                 logging.warning(f"Unable to parse acquisition time: {e}")
         return md
@@ -2110,11 +2111,17 @@ class Viewer():
 
 class CalibrationDialog:
 
-    def __init__(self, img, root, file_name):
+    def __init__(self, img, root, file_path):
         self.img = img
         self.root_window = root
         i1, i2 = find_white_frames(self.img.asarray())
-        output_name = os.path.splitext(file_name)[0] + "_calibrated.hdr"
+        self.folder = os.path.dirname(file_path)
+        files = os.listdir(self.folder)
+        dark_ref_file = ""
+        for f in files:
+            if f.endswith(".hdr") and "dark_ref" in f:
+                dark_ref_file = os.path.join(self.folder, f)
+        output_file = os.path.splitext(file_path)[0] + "_calibrated.hdr"
         layout = [
             [
                 sg.Column([
@@ -2144,23 +2151,23 @@ class CalibrationDialog:
             ],
             [
                 sg.Text("Dark reference", pad=(3, 0), size=(15, 1)),
-                sg.Input("", key="DarkRefPath", size=(25, 1)),
+                sg.Input(dark_ref_file, key="DarkRefPath", size=(35, 1)),
                 get_icon_button(
                     ICON_OPEN,
                     button_type=sg.BUTTON_TYPE_BROWSE_FILE,
                     file_types=(("ENVI", "*.hdr"),),
-                    initial_folder=self.root_window.default_folder,
+                    initial_folder=self.folder,
                     tooltip="Browse..."
                 )
             ],
             [
                 sg.Text("Save as", pad=(3, 0), size=(15, 1)),
-                sg.Input(output_name, key="SavePath", size=(25, 1)),
+                sg.Input(output_file, key="SavePath", size=(35, 1)),
                 get_icon_button(
                     ICON_OPEN,
                     button_type=sg.BUTTON_TYPE_SAVEAS_FILE,
                     file_types=(("ENVI", "*.hdr"),),
-                    initial_folder=self.root_window.default_folder,
+                    initial_folder=self.folder,
                     tooltip="Browse..."
                 )
             ],
@@ -2209,11 +2216,15 @@ class CalibrationDialog:
         i2 = int(v["Slider_i2"])
         S = self.img.asarray()
         W = S[i1:i2, :, :]
+        if 'interleave' in self.img.metadata:
+            interleave = self.img.metadata['interleave']
+        else:
+            interleave = 'bil'
         try:
             d_img = envi.open(v["DarkRefPath"])
             D = d_img.asarray()
             X = one_point_calibration(S, W, D, scale_factor=self.img.scale_factor)
-            envi.save_image(v["SavePath"], X, dtype='uint16', ext='.raw',
+            envi.save_image(v["SavePath"], X, dtype='uint16', ext='.raw', interleave=interleave,
                             metadata=self.img.metadata, force=True)
             self.root_window.open_file(file_path=v["SavePath"])
         except Exception as e:
