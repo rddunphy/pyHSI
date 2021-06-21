@@ -1767,9 +1767,9 @@ class PyHSI:
 class Viewer():
     """Window for viewing existing HSI files"""
 
-    def __init__(self, root_window, file_path, size):
+    def __init__(self, root, file_path, size):
         # TODO: Center relative to root window, like with other popups
-        self.root_window = root_window
+        self.root = root
         self.file_path = os.path.abspath(file_path)
         self.file_name = os.path.basename(file_path)
         self.img = envi.open(file_path)
@@ -1808,8 +1808,10 @@ class Viewer():
             layout=content,
             resizable=True,
             size=size,
-            finalize=True
+            finalize=True,
+            alpha_channel=0
         )
+
         self.window.bind("<Control-q>", sg.WINDOW_CLOSE_ATTEMPTED_EVENT)
         self.window.bind("<Control-o>", MENU_OPEN_FILE)
         self.window.bind("<F1>", MENU_HELP)
@@ -1822,12 +1824,19 @@ class Viewer():
         _, values = self.window.read(timeout=0)
         self.update_sliders(values)
 
+        self.window.refresh()
+        rx, ry = root.window.current_location()
+        rw, rh = root.window.size
+        ww, wh = self.window.size
+        self.window.move(rx + rw//2 - ww//2, ry + rh//2 - wh//2)
+        self.window.set_alpha(1)
+
     def handle_event(self, event, values):
         logging.debug(f"Handling {event} event in viewer window for '{self.file_name}'")
         if event == MENU_OPEN_FILE:
-            self.root_window.open_file()
+            self.root.open_file()
         elif event == MENU_HELP:
-            self.root_window.display_help()
+            self.root.display_help()
         elif event == INTERP_CB:
             self.interpolation = values[INTERP_CB]
             self.update_view()
@@ -1860,7 +1869,7 @@ class Viewer():
     def exit(self):
         """Close the viewer window"""
         logging.debug(f"Closing viewer window for '{self.file_name}'")
-        self.root_window.viewers.pop(self.window)
+        self.root.viewers.pop(self.window)
         self.window.close()
 
     def update_sliders(self, values):
@@ -1895,7 +1904,7 @@ class Viewer():
 
     def calibrate(self):
         """Open a calibration dialog for this image"""
-        w = CalibrationDialog(self.img, self.root_window, self.file_path)
+        w = CalibrationDialog(self.img, self.root, self.file_path)
         w.run()
 
     def display_hypercube(self):
@@ -2025,25 +2034,25 @@ class Viewer():
                     ICON_ROT_LEFT,
                     key=ROTLEFT_BTN,
                     tooltip="Rotate view left",
-                    hidpi=self.root_window.hidpi
+                    hidpi=self.root.hidpi
                 ),
                 get_icon_button(
                     ICON_ROT_RIGHT,
                     key=ROTRIGHT_BTN,
                     tooltip="Rotate view right",
-                    hidpi=self.root_window.hidpi
+                    hidpi=self.root.hidpi
                 ),
                 get_icon_button(
                     ICON_CALIBRATE,
                     key=CALIBRATE_BTN,
                     tooltip="Perform one-point calibration of image",
-                    hidpi=self.root_window.hidpi
+                    hidpi=self.root.hidpi
                 ),
                 get_icon_button(
                     ICON_CUBE,
                     key=HYPERCUBE_BTN,
                     tooltip="Display hypercube",
-                    hidpi=self.root_window.hidpi
+                    hidpi=self.root.hidpi
                 )
             ]
         ])
@@ -2058,13 +2067,13 @@ class Viewer():
                     ICON_BROWSER,
                     key=OPEN_FOLDER_IN_BROWSER,
                     tooltip="Open folder in file explorer",
-                    hidpi=self.root_window.hidpi
+                    hidpi=self.root.hidpi
                 ),
                 get_icon_button(
                     ICON_FILE,
                     key=OPEN_HEADER_FILE_IN_EDITOR,
                     tooltip="Open header file in text editor",
-                    hidpi=self.root_window.hidpi
+                    hidpi=self.root.hidpi
                 )
             ]], element_justification="right", expand_x=True, pad=(0, 0))
         ]]
@@ -2137,7 +2146,7 @@ class CalibrationDialog:
         max_img_size = (round(rs[0] * 0.5), round(rs[1] * 0.5))
         self.preview = resize_img_to_area(preview, max_img_size)
         self.view_scale = self.preview.shape[0] / self.img.shape[0]
-        self.root_window = root
+        self.root = root
         i1, i2 = find_white_frames(self.img.asarray())
         self.folder = os.path.dirname(file_path)
         files = os.listdir(self.folder)
@@ -2170,7 +2179,7 @@ class CalibrationDialog:
                     ]
                 ]),
                 sg.Column([[
-                    sg.Image(key="Image", size=(self.img.nrows, self.img.ncols))
+                    sg.Image(key="Image", size=(self.preview.shape[0], self.preview.shape[1]))
                 ]])
             ],
             [
@@ -2206,9 +2215,16 @@ class CalibrationDialog:
             layout,
             modal=True,
             keep_on_top=True,
-            finalize=True
+            finalize=True,
+            alpha_channel=0
         )
         self.update_frames(i1, i2)
+        self.window.refresh()
+        rx, ry = root.window.current_location()
+        rw, rh = root.window.size
+        ww, wh = self.window.size
+        self.window.move(rx + rw//2 - ww//2, ry + rh//2 - wh//2)
+        self.window.set_alpha(1)
 
     def run(self):
         while True:
@@ -2253,6 +2269,6 @@ class CalibrationDialog:
             X = one_point_calibration(S, W, D, scale_factor=self.img.scale_factor)
             envi.save_image(v["SavePath"], X, dtype='uint16', ext='.raw', interleave=interleave,
                             metadata=self.img.metadata, force=True)
-            self.root_window.open_file(file_path=v["SavePath"])
+            self.root.open_file(file_path=v["SavePath"])
         except Exception as e:
             logging.error(f"Error calibrating image: {e}")
