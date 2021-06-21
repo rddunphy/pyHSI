@@ -1,23 +1,33 @@
-import ctypes
-from datetime import datetime
-import json
-from json.decoder import JSONDecodeError
+"""Stuff to do with processing images and loading icons"""
+
 import logging
 import os
-import string
-import subprocess
-import sys
-import threading
 
 import cv2
-import dateutil
 import numpy as np
 import PySimpleGUI as sg
-import serial
-from serial.tools import list_ports
-import spectral
-from spectral.io import envi
-import tkinter as tk
+
+
+# Icon names correspond to filename with .png extension in ICON_DIR
+ICON_DIR = os.path.abspath("icons")
+ICON_APP = "pyhsi"
+ICON_RELOAD = "reload"
+ICON_OPEN = "open"
+ICON_PLAY = "play"
+ICON_PAUSE = "pause"
+ICON_ROT_LEFT = "rotate-left"
+ICON_ROT_RIGHT = "rotate-right"
+ICON_DELETE = "delete"
+ICON_CAMERA = "camera"
+ICON_STOP = "stop"
+ICON_RESET = "reset"
+ICON_MOVE = "move"
+ICON_EXPAND = "expand"
+ICON_FILE = "file"
+ICON_BROWSER = "browser"
+ICON_CALIBRATE = "calibrate"
+ICON_CUBE = "cube"
+ICON_CROP = "crop"
 
 
 def get_icon_button(icon, hidpi=False, **kwargs):
@@ -45,31 +55,3 @@ def resize_img_to_area(img, size, preserve_aspect_ratio=True, interpolation=Fals
     else:
         interp = cv2.INTER_NEAREST
     return cv2.resize(img, (new_w, new_h), interpolation=interp)
-
-
-###############################################################################
-# Icon names
-###############################################################################
-
-# Icon names correspond to filename with .png extension in ICON_DIR
-ICON_DIR = os.path.abspath("icons")
-ICON_APP = "pyhsi"
-ICON_RELOAD = "reload"
-ICON_OPEN = "open"
-ICON_PLAY = "play"
-ICON_PAUSE = "pause"
-ICON_ROT_LEFT = "rotate-left"
-ICON_ROT_RIGHT = "rotate-right"
-ICON_DELETE = "delete"
-ICON_CAMERA = "camera"
-ICON_STOP = "stop"
-ICON_RESET = "reset"
-ICON_MOVE = "move"
-ICON_EXPAND = "expand"
-ICON_FILE = "file"
-ICON_BROWSER = "browser"
-ICON_CALIBRATE = "calibrate"
-ICON_CUBE = "cube"
-ICON_CROP = "crop"
-
-

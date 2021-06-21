@@ -1,3 +1,5 @@
+"""Main entry point for GUI application"""
+
 import ctypes
 from datetime import datetime
 import json
@@ -23,7 +25,6 @@ from .dialogs import CalibrationDialog, CropDialog
 from .graphics import *
 from .. import __version__
 from ..cameras import BaslerCamera, MockCamera
-from ..preprocessing import find_white_frames, one_point_calibration
 from ..stages import TSA200, MockStage
 from ..utils import get_rgb_bands, add_wavelength_labels
 

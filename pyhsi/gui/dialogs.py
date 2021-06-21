@@ -1,33 +1,19 @@
-import ctypes
-from datetime import datetime
-import json
-from json.decoder import JSONDecodeError
+"""Dialogs used by the main application"""
+
 import logging
 import os
-import string
-import subprocess
-import sys
-import threading
 
 import cv2
-import dateutil
 import numpy as np
 import PySimpleGUI as sg
-import serial
-from serial.tools import list_ports
-import spectral
 from spectral.io import envi
-import tkinter as tk
 
 from .graphics import *
-from .. import __version__
-from ..cameras import BaslerCamera, MockCamera
 from ..preprocessing import find_white_frames, one_point_calibration
-from ..stages import TSA200, MockStage
-from ..utils import get_rgb_bands, add_wavelength_labels
 
 
 class CalibrationDialog:
+    """Dialog for performing one-point calibration on an image"""
 
     def __init__(self, img, root, file_path):
         # Create scaled grayscale image for preview
@@ -168,6 +154,7 @@ class CalibrationDialog:
 
 
 class CropDialog:
+    """Dialog for cropping a region of an image and discarding unwanted bands"""
 
     def __init__(self, img, root, file_path):
         # Create scaled grayscale image for preview
