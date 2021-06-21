@@ -133,6 +133,7 @@ METADATA_DESCRIPTION = "MetadataDescriptionMultiline"
 OPEN_FOLDER_IN_BROWSER = "OpenFolderInFileBrowser"
 OPEN_HEADER_FILE_IN_EDITOR = "OpenHeaderFileInEditor"
 CALIBRATE_BTN = "CalibrateImageButton"
+HYPERCUBE_BTN = "ViewHypercubeButton"
 
 
 ###############################################################################
@@ -157,6 +158,7 @@ ICON_EXPAND = "expand"
 ICON_FILE = "file"
 ICON_BROWSER = "browser"
 ICON_CALIBRATE = "calibrate"
+ICON_CUBE = "cube"
 
 
 ###############################################################################
@@ -1834,6 +1836,8 @@ class Viewer():
             self.update_view()
         elif event == CALIBRATE_BTN:
             self.calibrate()
+        elif event == HYPERCUBE_BTN:
+            self.display_hypercube()
         elif event == OPEN_FOLDER_IN_BROWSER:
             self.open_file_externally(os.path.dirname(self.file_path))
         elif event == OPEN_HEADER_FILE_IN_EDITOR:
@@ -1885,6 +1889,16 @@ class Viewer():
     def calibrate(self):
         w = CalibrationDialog(self.img, self.root_window, self.file_name)
         w.run()
+
+    def display_hypercube(self):
+        """Display a hypercube for this image"""
+        try:
+            spectral.view_cube(self.img, [self.red_band, self.green_band, self.blue_band])
+        except ImportError as e:
+            if "wx.glcanvas" in str(e):
+                logging.exception("Requires wx.glcanvas (try running `pip install wxpython`)")
+            else:
+                logging.exception(f"ImportError: {e}")
 
     def update_view(self):
         """Actually display the image"""
@@ -2013,6 +2027,11 @@ class Viewer():
                     ICON_CALIBRATE,
                     key=CALIBRATE_BTN,
                     tooltip="Perform one-point calibration of image"
+                ),
+                get_icon_button(
+                    ICON_CUBE,
+                    key=HYPERCUBE_BTN,
+                    tooltip="Display hypercube"
                 )
             ]
         ])
