@@ -13,6 +13,10 @@ def main(args):
         help="print debug information to console"
     )
     parser.add_argument(
+        '--hidpi', action='store_true',
+        help="scale icons up for hi-DPI displays"
+    )
+    parser.add_argument(
         '-c', '--config', default=None, type=argparse.FileType('r'),
         help="configuration file to load"
     )
@@ -37,7 +41,12 @@ def main(args):
             sys.exit(1)
     else:
         start_file = None
-    app = PyHSI(debug=opts.debug, config=config, start_file=start_file)
+    app = PyHSI(
+        debug=opts.debug,
+        config=config,
+        start_file=start_file,
+        hidpi=opts.hidpi
+    )
     app.run()
 
 

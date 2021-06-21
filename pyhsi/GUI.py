@@ -427,19 +427,12 @@ def template_to_file_name(root_dir, template, namespace, ext, max_n=99999):
                    f"(n<={max_n})"))
 
 
-def get_icon_button(icon, key=None, button_type=None, file_types=None,
-                    initial_folder=None, disabled=False, tooltip=None):
+def get_icon_button(icon, hidpi=False, **kwargs):
     """Create a button with an icon as an image"""
     mc = ("white", "#405e92")
-    icon_path = os.path.join(ICON_DIR, icon + ".png")
-    if button_type is not None:
-        return sg.Button("", image_filename=icon_path, key=key,
-                         disabled=disabled, button_type=button_type,
-                         file_types=file_types, target=(sg.ThisRow, -1),
-                         initial_folder=initial_folder, tooltip=tooltip,
-                         mouseover_colors=mc)
-    return sg.Button("", image_filename=icon_path, key=key, disabled=disabled,
-                     tooltip=tooltip, mouseover_colors=mc)
+    size = 40 if hidpi else 25
+    path = os.path.join(ICON_DIR, f"{icon}{size}.png")
+    return sg.Button("", image_filename=path, mouseover_colors=mc, **kwargs)
 
 
 def port_label(port):
@@ -476,7 +469,7 @@ def resize_img_to_area(img, size, preserve_aspect_ratio=True, interpolation=Fals
 class PyHSI:
     """Root window for capturing images"""
 
-    def __init__(self, debug=False, config=None, start_file=None):
+    def __init__(self, debug=False, config=None, start_file=None, hidpi=False):
         self.debug = debug
         self.viewers = {}
         self.default_folder = os.environ['HOME']
@@ -494,6 +487,7 @@ class PyHSI:
         self.viewer_img = None
         self.capture_thread = None
         self.captured_file = None
+        self.hidpi = hidpi
 
         # Global PySimpleGUI options
         icon_ext = ".ico" if sg.running_windows() else ".png"
@@ -1353,7 +1347,8 @@ class PyHSI:
                         file_types=(("ENVI", "*.hdr"),),
                         initial_folder=self.default_folder,
                         tooltip="Browse...",
-                        key=CAMERA_MOCK_FILE_BROWSE
+                        key=CAMERA_MOCK_FILE_BROWSE,
+                        hidpi=self.hidpi
                     )
                 ]], key=CAMERA_MOCK_CONTROL_PANE, pad=(0, 0), visible=False))
             ],
@@ -1474,7 +1469,8 @@ class PyHSI:
                     get_icon_button(
                         ICON_RELOAD,
                         key=PORT_RELOAD_BTN,
-                        tooltip="Reload port list"
+                        tooltip="Reload port list",
+                        hidpi=self.hidpi
                     )
                     # TODO: dynamically detect when port list changes?
                 ]], key=STAGE_PORT_PANE, pad=(0, 0)))
@@ -1624,25 +1620,29 @@ class PyHSI:
                 get_icon_button(
                     ICON_PLAY,
                     key=PREVIEW_BTN,
-                    tooltip="Toggle preview (Ctrl-P)"
+                    tooltip="Toggle preview (Ctrl-P)",
+                    hidpi=self.hidpi
                 ),
                 get_icon_button(
                     ICON_ROT_LEFT,
                     key=PREVIEW_ROTLEFT_BTN,
                     tooltip="Rotate preview left",
-                    disabled=True
+                    disabled=True,
+                    hidpi=self.hidpi
                 ),
                 get_icon_button(
                     ICON_ROT_RIGHT,
                     key=PREVIEW_ROTRIGHT_BTN,
                     tooltip="Rotate preview right",
-                    disabled=True
+                    disabled=True,
+                    hidpi=self.hidpi
                 ),
                 get_icon_button(
                     ICON_DELETE,
                     key=PREVIEW_CLEAR_BTN,
                     tooltip="Clear preview (Ctrl-W)",
-                    disabled=True
+                    disabled=True,
+                    hidpi=self.hidpi
                 )
             ]
         ])
@@ -1688,7 +1688,8 @@ class PyHSI:
                     button_type=sg.BUTTON_TYPE_BROWSE_FOLDER,
                     initial_folder=self.default_folder,
                     tooltip="Browse...",
-                    key=OUTPUT_FOLDER_BROWSE
+                    key=OUTPUT_FOLDER_BROWSE,
+                    hidpi=self.hidpi
                 )
             ],
             [
@@ -1716,29 +1717,34 @@ class PyHSI:
                 get_icon_button(
                     ICON_CAMERA,
                     key=CAPTURE_IMAGE_BTN,
-                    tooltip="Capture image and save (Ctrl-Enter)"
+                    tooltip="Capture image and save (Ctrl-Enter)",
+                    hidpi=self.hidpi
                 ),
                 get_icon_button(
                     ICON_RESET,
                     key=RESET_STAGE_BTN,
-                    tooltip="Reset stage to minimum (Ctrl-R)"
+                    tooltip="Reset stage to minimum (Ctrl-R)",
+                    hidpi=self.hidpi
                 ),
                 get_icon_button(
                     ICON_MOVE,
                     key=MOVE_STAGE_BTN,
-                    tooltip="Move stage to target position... (Ctrl-M)"
+                    tooltip="Move stage to target position... (Ctrl-M)",
+                    hidpi=self.hidpi
                 ),
                 get_icon_button(
                     ICON_STOP,
                     key=STOP_CAPTURE_BTN,
                     tooltip="Stop image capture (Ctrl-H)",
-                    disabled=True
+                    disabled=True,
+                    hidpi=self.hidpi
                 ),
                 get_icon_button(
                     ICON_EXPAND,
                     key=OPEN_IN_VIEWER_BTN,
                     tooltip="Open last captured file in viewer (Ctrl-Shift-O)",
-                    disabled=True
+                    disabled=True,
+                    hidpi=self.hidpi
                 ),
                 sg.pin(sg.ProgressBar(
                     1.0,
@@ -1762,6 +1768,7 @@ class Viewer():
     """Window for viewing existing HSI files"""
 
     def __init__(self, root_window, file_path, size):
+        # TODO: Center relative to root window, like with other popups
         self.root_window = root_window
         self.file_path = os.path.abspath(file_path)
         self.file_name = os.path.basename(file_path)
@@ -2017,22 +2024,26 @@ class Viewer():
                 get_icon_button(
                     ICON_ROT_LEFT,
                     key=ROTLEFT_BTN,
-                    tooltip="Rotate view left"
+                    tooltip="Rotate view left",
+                    hidpi=self.root_window.hidpi
                 ),
                 get_icon_button(
                     ICON_ROT_RIGHT,
                     key=ROTRIGHT_BTN,
-                    tooltip="Rotate view right"
+                    tooltip="Rotate view right",
+                    hidpi=self.root_window.hidpi
                 ),
                 get_icon_button(
                     ICON_CALIBRATE,
                     key=CALIBRATE_BTN,
-                    tooltip="Perform one-point calibration of image"
+                    tooltip="Perform one-point calibration of image",
+                    hidpi=self.root_window.hidpi
                 ),
                 get_icon_button(
                     ICON_CUBE,
                     key=HYPERCUBE_BTN,
-                    tooltip="Display hypercube"
+                    tooltip="Display hypercube",
+                    hidpi=self.root_window.hidpi
                 )
             ]
         ])
@@ -2041,17 +2052,21 @@ class Viewer():
             sg.Column([[
                 sg.Text("Header file", pad=label_pad, size=label_size),
                 sg.Text(self.file_name)
-            ]]),
+            ]], pad=(0, 0)),
             sg.Column([[
                 get_icon_button(
                     ICON_BROWSER,
                     key=OPEN_FOLDER_IN_BROWSER,
-                    tooltip="Open folder in file explorer"),
+                    tooltip="Open folder in file explorer",
+                    hidpi=self.root_window.hidpi
+                ),
                 get_icon_button(
                     ICON_FILE,
                     key=OPEN_HEADER_FILE_IN_EDITOR,
-                    tooltip="Open header file in text editor")
-            ]], element_justification="right", expand_x=True)
+                    tooltip="Open header file in text editor",
+                    hidpi=self.root_window.hidpi
+                )
+            ]], element_justification="right", expand_x=True, pad=(0, 0))
         ]]
         layout += [
             [sg.Text(k, pad=label_pad, size=label_size), sg.Text(v)] for (k, v) in metadata
@@ -2112,6 +2127,7 @@ class Viewer():
 class CalibrationDialog:
 
     def __init__(self, img, root, file_path):
+        # TODO: Center relative to root window, like with other popups
         # Create scaled grayscale image for preview
         self.img = img
         preview = img.read_band(img.nbands // 2)
@@ -2165,7 +2181,8 @@ class CalibrationDialog:
                     button_type=sg.BUTTON_TYPE_BROWSE_FILE,
                     file_types=(("ENVI", "*.hdr"),),
                     initial_folder=self.folder,
-                    tooltip="Browse..."
+                    tooltip="Browse...",
+                    hidpi=root.hidpi
                 )
             ],
             [
@@ -2176,7 +2193,8 @@ class CalibrationDialog:
                     button_type=sg.BUTTON_TYPE_SAVEAS_FILE,
                     file_types=(("ENVI", "*.hdr"),),
                     initial_folder=self.folder,
-                    tooltip="Browse..."
+                    tooltip="Browse...",
+                    hidpi=root.hidpi
                 )
             ],
             [
