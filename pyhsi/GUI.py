@@ -2112,7 +2112,15 @@ class Viewer():
 class CalibrationDialog:
 
     def __init__(self, img, root, file_path):
+        # Create scaled grayscale image for preview
         self.img = img
+        preview = img.read_band(img.nbands // 2)
+        preview = np.ascontiguousarray(preview * 255, dtype="uint8")
+        preview = np.repeat(preview[:, :, np.newaxis], 3, axis=2)
+        rs = root.window.size
+        max_img_size = (round(rs[0] * 0.5), round(rs[1] * 0.5))
+        self.preview = resize_img_to_area(preview, max_img_size)
+        self.view_scale = self.preview.shape[0] / self.img.shape[0]
         self.root_window = root
         i1, i2 = find_white_frames(self.img.asarray())
         self.folder = os.path.dirname(file_path)
@@ -2198,14 +2206,15 @@ class CalibrationDialog:
 
     def update_frames(self, i1, i2):
         """Update image to show the selected frames with red lines"""
-        img = self.img.read_band(self.img.nbands // 2)
-        img = np.ascontiguousarray(img * 255, dtype="uint8")
-        img = np.repeat(img[:, :, np.newaxis], 3, axis=2)
-        x = img.shape[1] - 1
-        img = cv2.line(img, (0, i1), (x, i1), (0, 0, 255), 1)
-        img = cv2.line(img, (0, i2), (x, i2), (0, 0, 255), 1)
+        i1 = round(i1 * self.view_scale)
+        i2 = round(i2 * self.view_scale)
+        img = self.preview.copy()
+        max_x = img.shape[1] - 1
+        c = (0, 0, 255)  # Use red for overlay
+        img = cv2.line(img, (0, i1), (max_x, i1), c)
+        img = cv2.line(img, (0, i2), (max_x, i2), c)
         overlay = np.zeros(img.shape, np.uint8)
-        overlay = cv2.rectangle(overlay, (0, i1), (x, i2), (0, 0, 255), -1)
+        overlay = cv2.rectangle(overlay, (0, i1), (max_x, i2), c, -1)
         img = cv2.addWeighted(overlay, 0.1, img, 0.9, 0)
         img = cv2.imencode('.png', img)[1].tobytes()
         self.window["Image"].update(data=img)
