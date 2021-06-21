@@ -10,6 +10,7 @@ import sys
 import threading
 
 import cv2
+import dateutil
 import numpy as np
 import PySimpleGUI as sg
 import serial
@@ -2071,7 +2072,11 @@ class Viewer():
             ("Scale factor", str(self.img.scale_factor))
         ]
         if 'acquisition time' in self.img.metadata:
-            md += [("Acquisition time", self.img.metadata['acquisition time'])]
+            try:
+                acq_time = dateutil.parser.isoparse(self.img.metadata['acquisition time'])
+                md += [("Acquisition time", acq_time.strftime("%a, %d/%m/%Y %T (%z)"))]
+            except ValueError as e:
+                logging.warning(f"Unable to parse acquisition time: {e}")
         return md
 
     def view_panel(self):

@@ -331,7 +331,7 @@ class MockCamera:
         data = self.capture(stage, ranges, velocity=velocity, flip=flip,
                             verbose=verbose, progress_callback=progress_callback)
         md = {
-            'acquisition time': acq_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'acquisition time': acq_time.astimezone().isoformat(),
             'reflectance scale factor': self.ref_scale_factor,
             'wavelength': self.wl
         }
