@@ -63,7 +63,6 @@ STAGE_TYPE_SEL = "StageModel"
 STAGE_TYPE_MOCK = "Mock stage"
 STAGE_TYPE_TSA200 = "Zolix TSA200"
 STAGE_PORT_SEL = "StagePortSelect"
-PORT_RELOAD_BTN = "PortRefresh"
 STAGE_PORT_PANE = "PortRefreshPane"
 RANGE_START_INPUT = "RangeStart"
 RANGE_END_INPUT = "RangeEnd"
@@ -110,18 +109,9 @@ CAPTURE_THREAD_PROGRESS = "CaputureThreadProgress"
 
 # Menubar items
 MENU_OPEN_FILE = "Open image in viewer... (Ctrl-O)"
-# MENU_OPEN_CAPTURED = "Open last captured image in viewer (Ctrl-Shift-O)"
 MENU_SAVE_CONFIG = "Save configuration as... (Ctrl-S)"
 MENU_LOAD_CONFIG = "Load configuration... (Ctrl-L)"
 MENU_QUIT = "Quit (Ctrl-Q)"
-# MENU_TOGGLE_LIVE_PREVIEW = "Toggle live preview (Ctrl-P)"
-# MENU_ROTATE_PREVIEW_RIGHT = "Rotate preview right"
-# MENU_ROTATE_PREVIEW_LEFT = "Rotate preview left"
-# MENU_CLEAR_PREVIEW = "Clear preview aread (Ctrl-W)"
-# MENU_CAPTURE = "Capture and save image (Ctrl-Enter)"
-# MENU_RESET_STAGE = "Reset stage to minimum (Ctrl-R)"
-# MENU_MOVE_STAGE = "Move stage to... (Ctrl-M)"
-# MENU_STOP_STAGE = "Stop stage/image capture (Ctrl-H)"
 MENU_HELP = "Help (F1)"
 MENU_ABOUT = "About"
 
@@ -556,11 +546,13 @@ class PyHSI:
         """Main event loop - events handled in `handle_event`"""
         try:
             while True:
-                timeout = 10 if self.live_preview_active else None
+                timeout = 10 if self.live_preview_active else 1000
                 window, event, values = sg.read_all_windows(timeout=timeout)
-                if event == '__TIMEOUT__' and self.live_preview_active:
-                    _, values = self.window.read(timeout=0)
-                    self.live_preview_next_frame(values)
+                if event == '__TIMEOUT__':
+                    if self.live_preview_active:
+                        _, values = self.window.read(timeout=0)
+                        self.live_preview_next_frame(values)
+                    self.reload_stage_ports()
                 elif window is self.window:
                     self.handle_event(event, values)
                 else:
@@ -660,8 +652,6 @@ class PyHSI:
         elif event == PREVIEW_INTERP_CB:
             if not self.live_preview_active:
                 self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
-        elif event == PORT_RELOAD_BTN:
-            self.reload_stage_ports()
         elif event == OUTPUT_FOLDER:
             self.set_default_folder(values[OUTPUT_FOLDER], warn=False)
         elif event == MENU_OPEN_FILE:
@@ -696,18 +686,20 @@ class PyHSI:
 
     def reload_stage_ports(self):
         """Update list of available serial ports"""
-        self.ports = list_ports.comports()
-        logging.info(f"Found {len(self.ports)} available serial port(s).")
-        if len(self.ports) > 0:
-            ports = [port_label(p) for p in self.ports]
-        else:
-            ports = ["No ports found"]
-        self.window[STAGE_PORT_SEL].update(
-            values=ports,
-            value=ports[0],
-            disabled=(len(self.ports) == 0),
-            readonly=True
-        )
+        ports = list_ports.comports()
+        if ports != self.ports:
+            self.ports = ports
+            logging.info(f"Found {len(self.ports)} available serial port(s).")
+            if len(self.ports) > 0:
+                ports = [port_label(p) for p in self.ports]
+            else:
+                ports = ["No ports found"]
+            self.window[STAGE_PORT_SEL].update(
+                values=ports,
+                value=ports[0],
+                disabled=(len(self.ports) == 0),
+                readonly=True
+            )
 
     def update_gain_label(self, values):
         """Calculate actual gain in dB from raw gain value"""
@@ -1444,14 +1436,7 @@ class PyHSI:
                         key=STAGE_PORT_SEL,
                         size=(20, 1),
                         readonly=True
-                    ),
-                    get_icon_button(
-                        "reload",
-                        key=PORT_RELOAD_BTN,
-                        tooltip="Reload port list",
-                        hidpi=self.hidpi
                     )
-                    # TODO: dynamically detect when port list changes?
                 ]], key=STAGE_PORT_PANE, pad=(0, 0)))
             ],
             [
