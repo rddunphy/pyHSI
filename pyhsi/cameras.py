@@ -79,6 +79,7 @@ class BaslerCamera:
         return self.raw_gain_factor * self.raw_gain
 
     def set_hardware_values(self):
+        """Write any settings that have changed to the device"""
         if self.dirty:
             if self.device is None:
                 device = pylon.TlFactory.GetInstance().CreateFirstDevice()
@@ -96,16 +97,22 @@ class BaslerCamera:
             self.dirty = False
 
     def get_frame(self, flip=False, highlight=False):
-        self.set_hardware_values()
-        img = self.result_image[self._current_frame, :, :]
-        img = img / self.ref_scale_factor
-        self._current_frame = (self._current_frame + 1) % self.result_image.shape[0]
-        if flip:
-            img = np.flipud(img)
-        if highlight:
-            img = highlight_saturated(img)
-        img = np.asarray(img * 255, dtype="uint8")
-        return img
+        """Grab the next frame from the camera
+
+        Requires self.device.StartGrabbing() to have been called first."""
+        grab = self.device.RetrieveResult(
+                    5000, pylon.TimeoutHandling_ThrowException)
+        if grab.GrabSucceeded():
+            img = np.asarray(grab.Array) / self.ref_scale_factor
+            if flip:
+                img = np.flipud(img)
+            if highlight:
+                img = highlight_saturated(img)
+            img = np.asarray(img * 255, dtype="uint8")
+            return img
+        else:
+            logging.warning("Dropped frame")
+            return None
 
     def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
                      verbose=True, overwrite=False, description=""):
@@ -156,7 +163,7 @@ class BaslerCamera:
                         interleave='bil', ext='.raw', metadata=md,
                         force=overwrite)
         if verbose:
-            logging.info(f"Image saved as {file_name}.")
+            logging.info(f"Image saved as {file_name}")
         return data, md
 
     def capture(self, stage, ranges, velocity=None, flip=False, verbose=True):
@@ -342,7 +349,7 @@ class MockCamera:
                         interleave='bil', ext='.raw', metadata=md,
                         force=overwrite)
         if verbose:
-            logging.info(f"Image saved as {file_name}.")
+            logging.info(f"Image saved as {file_name}")
         return data, md
 
     def capture(self, stage, ranges, velocity=None, flip=False, verbose=True,

@@ -110,9 +110,18 @@ CAPTURE_THREAD_PROGRESS = "CaputureThreadProgress"
 
 # Menubar items
 MENU_OPEN_FILE = "Open image in viewer... (Ctrl-O)"
+# MENU_OPEN_CAPTURED = "Open last captured image in viewer (Ctrl-Shift-O)"
 MENU_SAVE_CONFIG = "Save configuration as... (Ctrl-S)"
 MENU_LOAD_CONFIG = "Load configuration... (Ctrl-L)"
 MENU_QUIT = "Quit (Ctrl-Q)"
+# MENU_TOGGLE_LIVE_PREVIEW = "Toggle live preview (Ctrl-P)"
+# MENU_ROTATE_PREVIEW_RIGHT = "Rotate preview right"
+# MENU_ROTATE_PREVIEW_LEFT = "Rotate preview left"
+# MENU_CLEAR_PREVIEW = "Clear preview aread (Ctrl-W)"
+# MENU_CAPTURE = "Capture and save image (Ctrl-Enter)"
+# MENU_RESET_STAGE = "Reset stage to minimum (Ctrl-R)"
+# MENU_MOVE_STAGE = "Move stage to... (Ctrl-M)"
+# MENU_STOP_STAGE = "Stop stage/image capture (Ctrl-H)"
 MENU_HELP = "Help (F1)"
 MENU_ABOUT = "About"
 
@@ -551,7 +560,7 @@ class PyHSI:
                 window, event, values = sg.read_all_windows(timeout=timeout)
                 if event == '__TIMEOUT__' and self.live_preview_active:
                     _, values = self.window.read(timeout=0)
-                    self.next_live_preview_frame(values)
+                    self.live_preview_next_frame(values)
                 elif window is self.window:
                     self.handle_event(event, values)
                 else:
@@ -965,22 +974,26 @@ class PyHSI:
         try:
             logging.debug("Starting live preview")
             self.setup_camera(values)
-            self.live_preview_active = True
-            self.next_live_preview_frame(values)
-            icon_path = os.path.join(ICON_DIR, ICON_PAUSE + ".png")
-            self.window[PREVIEW_BTN].update(image_filename=icon_path)
+            if self.camera_type == CAMERA_TYPE_BASLER:
+                self.camera.set_hardware_values()
+                self.camera.device.StartGrabbing()
+            set_button_icon(self.window[PREVIEW_BTN], "pause", hidpi=self.hidpi)
             self.window[PREVIEW_CLEAR_BTN].update(disabled=False)
             self.window[PREVIEW_ROTLEFT_BTN].update(disabled=False)
             self.window[PREVIEW_ROTRIGHT_BTN].update(disabled=False)
+            self.live_preview_active = True
+            self.live_preview_next_frame(values)
         except Exception as e:
             logging.exception(f"Unable to start preview: {e}")
 
     def stop_live_preview(self):
         """Stop displaying frames from camera"""
         logging.debug("Stopping live preview")
-        icon_path = os.path.join(ICON_DIR, ICON_PLAY + ".png")
-        self.window[PREVIEW_BTN].update(image_filename=icon_path)
+        set_button_icon(self.window[PREVIEW_BTN], "play", hidpi=self.hidpi)
         self.live_preview_active = False
+        if self.camera_type == CAMERA_TYPE_BASLER:
+            self.camera.device.StopGrabbing()
+            self.camera.device.Close()
 
     def clear_preview(self):
         """Reset live preview and remove whatever is currently displayed"""
@@ -993,7 +1006,7 @@ class PyHSI:
         self.window[PREVIEW_ROTLEFT_BTN].update(disabled=True)
         self.window[PREVIEW_ROTRIGHT_BTN].update(disabled=True)
 
-    def next_live_preview_frame(self, values):
+    def live_preview_next_frame(self, values):
         """Get next frame from camera, process, and display"""
         # Pseudocolour takes precedence over highlight
         flip = values[REVERSE_COLUMNS_CB]
@@ -1004,6 +1017,9 @@ class PyHSI:
             hl = False
         try:
             frame = self.camera.get_frame(flip=flip, highlight=hl)
+            if frame is None:
+                logging.debug("Dropped frame")
+                return
             frame = np.asarray(frame * 255, dtype="uint8")
         except Exception as e:
             logging.exception(f"Unable to connect to camera: {e}")
