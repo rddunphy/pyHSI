@@ -22,7 +22,8 @@ from spectral.io import envi
 import tkinter as tk
 
 from .dialogs import CalibrationDialog, CropDialog
-from .graphics import *
+from .graphics import (get_application_icon_path, get_icon_button,
+                       set_button_icon, resize_img_to_area)
 from .. import __version__
 from ..cameras import BaslerCamera, MockCamera
 from ..stages import TSA200, MockStage
@@ -445,15 +446,22 @@ class PyHSI:
         self.hidpi = hidpi
 
         # Global PySimpleGUI options
-        icon_ext = ".ico" if sg.running_windows() else ".png"
-        icon_path = os.path.join(ICON_DIR, ICON_APP + icon_ext)
-        sg.set_global_icon(icon_path)
+        sg.set_global_icon(get_application_icon_path())
         sg.set_options(font=("latin modern sans", 12))
 
         # PySimpleGUI layout
-        menubar = sg.Menu([
-            ["&File", ["&" + MENU_OPEN_FILE, "&" + MENU_SAVE_CONFIG, "&" + MENU_LOAD_CONFIG, "&" + MENU_QUIT]],
-            ["&Help", ["&" + MENU_HELP, "&" + MENU_ABOUT]]
+        self.menubar = sg.Menu([
+            ["&File", [
+                "&" + MENU_OPEN_FILE,
+                "&" + MENU_SAVE_CONFIG,
+                "&" + MENU_LOAD_CONFIG,
+                "---",
+                "&" + MENU_QUIT
+            ]],
+            ["&Help", [
+                "&" + MENU_HELP,
+                "&" + MENU_ABOUT
+            ]]
         ])
         content = [
             [
@@ -477,7 +485,7 @@ class PyHSI:
         self.x_expand_elements.append(console)
         self.window = sg.Window(
             title="PyHSI",
-            layout=[[menubar], [content], [console]],
+            layout=[[self.menubar], [content], [console]],
             enable_close_attempted_event=True,
             resizable=True,
             size=(99999, 99999),
@@ -1297,7 +1305,7 @@ class PyHSI:
                         enable_events=True
                     ),
                     get_icon_button(
-                        ICON_OPEN,
+                        "open",
                         button_type=sg.BUTTON_TYPE_BROWSE_FILE,
                         file_types=(("ENVI", "*.hdr"),),
                         initial_folder=self.default_folder,
@@ -1422,7 +1430,7 @@ class PyHSI:
                         readonly=True
                     ),
                     get_icon_button(
-                        ICON_RELOAD,
+                        "reload",
                         key=PORT_RELOAD_BTN,
                         tooltip="Reload port list",
                         hidpi=self.hidpi
@@ -1573,27 +1581,27 @@ class PyHSI:
             ],
             [
                 get_icon_button(
-                    ICON_PLAY,
+                    "play",
                     key=PREVIEW_BTN,
                     tooltip="Toggle preview (Ctrl-P)",
                     hidpi=self.hidpi
                 ),
                 get_icon_button(
-                    ICON_ROT_LEFT,
+                    "rotate-left",
                     key=PREVIEW_ROTLEFT_BTN,
                     tooltip="Rotate preview left",
                     disabled=True,
                     hidpi=self.hidpi
                 ),
                 get_icon_button(
-                    ICON_ROT_RIGHT,
+                    "rotate-right",
                     key=PREVIEW_ROTRIGHT_BTN,
                     tooltip="Rotate preview right",
                     disabled=True,
                     hidpi=self.hidpi
                 ),
                 get_icon_button(
-                    ICON_DELETE,
+                    "delete",
                     key=PREVIEW_CLEAR_BTN,
                     tooltip="Clear preview (Ctrl-W)",
                     disabled=True,
@@ -1639,7 +1647,7 @@ class PyHSI:
                     enable_events=True
                 ),
                 get_icon_button(
-                    ICON_OPEN,
+                    "open",
                     button_type=sg.BUTTON_TYPE_BROWSE_FOLDER,
                     initial_folder=self.default_folder,
                     tooltip="Browse...",
@@ -1670,32 +1678,32 @@ class PyHSI:
             ],
             [
                 get_icon_button(
-                    ICON_CAMERA,
+                    "camera",
                     key=CAPTURE_IMAGE_BTN,
                     tooltip="Capture image and save (Ctrl-Enter)",
                     hidpi=self.hidpi
                 ),
                 get_icon_button(
-                    ICON_RESET,
+                    "reset",
                     key=RESET_STAGE_BTN,
                     tooltip="Reset stage to minimum (Ctrl-R)",
                     hidpi=self.hidpi
                 ),
                 get_icon_button(
-                    ICON_MOVE,
+                    "move",
                     key=MOVE_STAGE_BTN,
                     tooltip="Move stage to target position... (Ctrl-M)",
                     hidpi=self.hidpi
                 ),
                 get_icon_button(
-                    ICON_STOP,
+                    "stop",
                     key=STOP_CAPTURE_BTN,
                     tooltip="Stop image capture (Ctrl-H)",
                     disabled=True,
                     hidpi=self.hidpi
                 ),
                 get_icon_button(
-                    ICON_EXPAND,
+                    "expand",
                     key=OPEN_IN_VIEWER_BTN,
                     tooltip="Open last captured file in viewer (Ctrl-Shift-O)",
                     disabled=True,
@@ -1992,31 +2000,31 @@ class Viewer():
             ],
             [
                 get_icon_button(
-                    ICON_ROT_LEFT,
+                    "rotate-left",
                     key=ROTLEFT_BTN,
                     tooltip="Rotate view left",
                     hidpi=self.root.hidpi
                 ),
                 get_icon_button(
-                    ICON_ROT_RIGHT,
+                    "rotate-right",
                     key=ROTRIGHT_BTN,
                     tooltip="Rotate view right",
                     hidpi=self.root.hidpi
                 ),
                 get_icon_button(
-                    ICON_CALIBRATE,
+                    "calibrate",
                     key=CALIBRATE_BTN,
                     tooltip="Perform one-point calibration of image",
                     hidpi=self.root.hidpi
                 ),
                 get_icon_button(
-                    ICON_CROP,
+                    "crop",
                     key=CROP_BTN,
                     tooltip="Crop image",
                     hidpi=self.root.hidpi
                 ),
                 get_icon_button(
-                    ICON_CUBE,
+                    "cube",
                     key=HYPERCUBE_BTN,
                     tooltip="Display hypercube",
                     hidpi=self.root.hidpi
@@ -2031,13 +2039,13 @@ class Viewer():
             ]], pad=(0, 0)),
             sg.Column([[
                 get_icon_button(
-                    ICON_BROWSER,
+                    "browser",
                     key=OPEN_FOLDER_IN_BROWSER,
                     tooltip="Open folder in file explorer",
                     hidpi=self.root.hidpi
                 ),
                 get_icon_button(
-                    ICON_FILE,
+                    "file",
                     key=OPEN_HEADER_FILE_IN_EDITOR,
                     tooltip="Open header file in text editor",
                     hidpi=self.root.hidpi

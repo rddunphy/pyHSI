@@ -8,7 +8,7 @@ import numpy as np
 import PySimpleGUI as sg
 from spectral.io import envi
 
-from .graphics import *
+from .graphics import get_icon_button, resize_img_to_area
 from ..preprocessing import find_white_frames, one_point_calibration
 
 
@@ -65,7 +65,7 @@ class CalibrationDialog:
                 sg.Text("Dark reference", pad=(3, 0), size=(15, 1)),
                 sg.Input(dark_ref_file, key="DarkRefPath", size=(35, 1)),
                 get_icon_button(
-                    ICON_OPEN,
+                    "open",
                     button_type=sg.BUTTON_TYPE_BROWSE_FILE,
                     file_types=(("ENVI", "*.hdr"),),
                     initial_folder=self.folder,
@@ -77,7 +77,7 @@ class CalibrationDialog:
                 sg.Text("Save as", pad=(3, 0), size=(15, 1)),
                 sg.Input(output_file, key="SavePath", size=(35, 1)),
                 get_icon_button(
-                    ICON_OPEN,
+                    "open",
                     button_type=sg.BUTTON_TYPE_SAVEAS_FILE,
                     file_types=(("ENVI", "*.hdr"),),
                     initial_folder=self.folder,
@@ -230,7 +230,7 @@ class CropDialog:
                 sg.Text("Save as", pad=(3, 0), size=(15, 1)),
                 sg.Input(output_file, key="SavePath", size=(35, 1)),
                 get_icon_button(
-                    ICON_OPEN,
+                    "open",
                     button_type=sg.BUTTON_TYPE_SAVEAS_FILE,
                     file_types=(("ENVI", "*.hdr"),),
                     initial_folder=self.folder,
@@ -283,10 +283,7 @@ class CropDialog:
         max_x = img.shape[1] - 1
         max_y = img.shape[0] - 1
         c = (0, 0, 255)  # Use red for overlay
-        img = cv2.line(img, (x1, 0), (x1, max_y), c)
-        img = cv2.line(img, (x2, 0), (x2, max_y), c)
-        img = cv2.line(img, (0, y1), (max_x, y1), c)
-        img = cv2.line(img, (0, y2), (max_x, y2), c)
+        img = cv2.rectangle(img, (x1, y1), (x2, y2), c, 1)
         overlay = np.zeros(img.shape, np.uint8)
         overlay = cv2.rectangle(overlay, (0, 0), (max_x, y1), c, -1)
         overlay = cv2.rectangle(overlay, (0, 0), (x1, max_y), c, -1)
@@ -314,7 +311,7 @@ class CropDialog:
         else:
             interleave = 'bil'
         if 'wavelength' in metadata:
-            metadata['wavelength'] = metadata['wavelength'][lambda1 : lambda2 + 1]
+            metadata['wavelength'] = metadata['wavelength'][lambda1:lambda2+1]
         try:
             envi.save_image(v["SavePath"], img, dtype='uint16', ext='.raw', interleave=interleave,
                             metadata=metadata, force=True)

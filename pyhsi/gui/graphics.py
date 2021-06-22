@@ -1,41 +1,38 @@
 """Stuff to do with processing images and loading icons"""
 
-import logging
 import os
 
 import cv2
-import numpy as np
 import PySimpleGUI as sg
 
 
 # Icon names correspond to filename with .png extension in ICON_DIR
 ICON_DIR = os.path.abspath("icons")
-ICON_APP = "pyhsi"
-ICON_RELOAD = "reload"
-ICON_OPEN = "open"
-ICON_PLAY = "play"
-ICON_PAUSE = "pause"
-ICON_ROT_LEFT = "rotate-left"
-ICON_ROT_RIGHT = "rotate-right"
-ICON_DELETE = "delete"
-ICON_CAMERA = "camera"
-ICON_STOP = "stop"
-ICON_RESET = "reset"
-ICON_MOVE = "move"
-ICON_EXPAND = "expand"
-ICON_FILE = "file"
-ICON_BROWSER = "browser"
-ICON_CALIBRATE = "calibrate"
-ICON_CUBE = "cube"
-ICON_CROP = "crop"
+
+
+def get_application_icon_path():
+    """Get the PyHSI icon for this OS (.ico for Windows, .png otherwise)"""
+    icon_ext = ".ico" if sg.running_windows() else ".png"
+    return os.path.join(ICON_DIR, "pyhsi" + icon_ext)
+
+
+def get_icon_path(icon, hidpi=False):
+    """Return full path for icon with given name"""
+    size = 40 if hidpi else 25
+    return os.path.join(ICON_DIR, f"{icon}{size}.png")
 
 
 def get_icon_button(icon, hidpi=False, **kwargs):
     """Create a button with an icon as an image"""
     mc = ("white", "#405e92")
-    size = 40 if hidpi else 25
-    path = os.path.join(ICON_DIR, f"{icon}{size}.png")
+    path = get_icon_path(icon, hidpi=hidpi)
     return sg.Button("", image_filename=path, mouseover_colors=mc, **kwargs)
+
+
+def set_button_icon(button, icon, hidpi=False, **kwargs):
+    """Change image on button"""
+    path = get_icon_path(icon, hidpi=hidpi)
+    button.update(image_filename=path, **kwargs)
 
 
 def resize_img_to_area(img, size, preserve_aspect_ratio=True, interpolation=False):
