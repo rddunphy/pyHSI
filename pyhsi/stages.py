@@ -20,7 +20,14 @@ import timeit
 
 
 class TSA200:
-    """Represents an instance of the Zolix TSA200 linear stage."""
+    """Represents an instance of the Zolix TSA200 linear stage.
+
+    This is for the stage with the Schneider MDrive Plus motor controller
+    (https://motion.schneider-electric.com/downloads/manuals/MDI17_23_Plus.pdf)
+    Serial commands are Schneider MCode, see:
+    https://motion.schneider-electric.com/application-note/intro-mcode-basic-motion-commands/
+    https://motion.schneider-electric.com/application-note/intro-lexium-mcode-program-language-structure/
+    """
 
     def __init__(self, velocity=20, length=196, max_velocity=40,
                  port=None, device_name="USB2Serial 1xRS422/485"):
@@ -80,13 +87,24 @@ class TSA200:
         return self._serial.read_until(self._read_terminator).strip()
 
     def get_position(self):
-        # TODO
-        pass
+        """Current position in mm - stage must have previously been reset"""
+        self._write(b'PR P')
+        steps = int(self._read())
+        return steps / self._mm_to_steps
 
     def is_moving(self):
         """Returns True if the stage is currently moving, False otherwise."""
         self._write(b'PR MV')  # Print Moving - returns 1 if moving, else 0
         return bool(int(self._read()))
+
+    def stop(self):
+        """Stop stage, cancelling any prior movement commands"""
+        if self.is_moving():
+            logging.info("Stopping translation stage")
+            self._write(b'MR 0')
+        else:
+            logging.debug("Stage already stopped")
+        logging.debug(f"Stage at position {self.get_position:.2f} mm")
 
     def wait_while_moving(self):
         """Block execution until the stage is no longer moving."""
