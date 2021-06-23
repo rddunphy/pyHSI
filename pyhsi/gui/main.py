@@ -427,7 +427,7 @@ class PyHSI:
     def __init__(self, debug=False, config=None, start_file=None, hidpi=False):
         self.debug = debug
         self.viewers = {}
-        self.default_folder = os.environ['HOME']
+        self.default_folder = os.path.expanduser('~')
         self.xy_expand_elements = []
         self.x_expand_elements = []
         self.live_preview_active = False

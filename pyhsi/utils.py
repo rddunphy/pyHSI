@@ -1,7 +1,7 @@
 """Utility tools for viewing and working with hyperspectral images."""
 
 import cv2
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 import numpy as np
 
 
