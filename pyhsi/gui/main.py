@@ -425,7 +425,7 @@ def port_label(port):
 class PyHSI:
     """Root window for capturing images"""
 
-    def __init__(self, debug=False, config=None, start_file=None, hidpi=False):
+    def __init__(self, debug=False, config=None, start_files=None, hidpi=False):
         self.debug = debug
         self.viewers = {}
         self.default_folder = os.environ['HOME']
@@ -540,8 +540,9 @@ class PyHSI:
             else:
                 logging.error(f"No configuration file at {config}")
 
-        if start_file is not None:
-            self.open_file(start_file)
+        if start_files is not None:
+            for f in start_files:
+                self.open_file(f)
 
     def run(self):
         """Main event loop - events handled in `handle_event`"""

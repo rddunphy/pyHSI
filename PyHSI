@@ -22,7 +22,7 @@ def main(args):
         help="configuration file to load"
     )
     parser.add_argument(
-        '-f', '--file', default=None, type=argparse.FileType('r'),
+        'files', nargs='*', default=None, type=argparse.FileType('r'),
         help="ENVI file to open in viewer"
     )
     opts = parser.parse_args(args)
@@ -34,18 +34,17 @@ def main(args):
             sys.exit(1)
     else:
         config = None
-    if opts.file is not None:
-        opts.file.close()
-        start_file = opts.file.name
-        if not start_file.endswith('.hdr'):
+    start_files = []
+    for f in opts.files:
+        f.close()
+        start_files.append(f.name)
+        if not f.name.endswith('.hdr'):
             sys.stderr.write("Can currently only load files of type *.hdr\n")
             sys.exit(1)
-    else:
-        start_file = None
     app = PyHSI(
         debug=opts.debug,
         config=config,
-        start_file=start_file,
+        start_files=start_files,
         hidpi=opts.hidpi
     )
     app.run()
