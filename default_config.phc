@@ -19,6 +19,6 @@
     "PreviewInterpolation": false,
     "OutputFormat": "ENVI",
     "SaveFileName": "{date}_{n}",
-    "ImageDescription": "Image captured on {model} with PyHSI v{version}\n",
+    "ImageDescription": "Camera: {model}\nRange: {start}-{stop} mm\nVelocity: {vel} mm/s\nExposure time: {exp} ms\nBinning: {bin} px\nGain: {raw_gain} ({gain} dB)\nPyHSI v{version}",
     "Version": "0.2.0"
 }

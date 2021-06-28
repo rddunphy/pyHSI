@@ -104,12 +104,13 @@ class TSA200:
             self._write(b'MR 0')
         else:
             logging.debug("Stage already stopped")
-        logging.debug(f"Stage at position {self.get_position:.2f} mm")
+        logging.debug(f"Stage at position {self.get_position():.4f} mm")
 
     def wait_while_moving(self):
         """Block execution until the stage is no longer moving."""
         while self.is_moving():
             continue
+        logging.debug(f"Finshed moving at {self.get_position():.4f} mm")
 
     def reset(self):
         """Reset stage to 0 mm.

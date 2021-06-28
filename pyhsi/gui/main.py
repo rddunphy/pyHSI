@@ -19,6 +19,7 @@ import serial
 from serial.tools import list_ports
 import spectral
 from spectral.io import envi
+from spectral.io.spyfile import FileNotFoundError as SpyFileNotFoundError
 import tkinter as tk
 
 from .dialogs import CalibrationDialog, CropDialog
@@ -99,7 +100,7 @@ OUTPUT_FOLDER_BROWSE = "OutputFolderBrowseButton"
 SAVE_FILE = "SaveFileName"
 IMAGE_DESCRIPTION_INPUT = "ImageDescription"
 CAPTURE_IMAGE_BTN = "CaptureImage"
-STOP_CAPTURE_BTN = "StopImageCapture"
+# STOP_CAPTURE_BTN = "StopImageCapture"
 RESET_STAGE_BTN = "ResetStageButton"
 MOVE_STAGE_BTN = "MoveStageButton"
 OPEN_IN_VIEWER_BTN = "OpenCapturedFileInViewerButton"
@@ -508,7 +509,7 @@ class PyHSI:
         self.window.bind("<Control-Return>", CAPTURE_IMAGE_BTN)
         self.window.bind("<Control-r>", RESET_STAGE_BTN)
         self.window.bind("<Control-m>", MOVE_STAGE_BTN)
-        self.window.bind("<Control-h>", STOP_CAPTURE_BTN)
+        # self.window.bind("<Control-h>", STOP_CAPTURE_BTN)
         self.window.bind("<F1>", MENU_HELP)
 
         # Set up logging
@@ -610,8 +611,8 @@ class PyHSI:
                 logging.debug(f"Suppressed exception: {e}")
         elif event == CAPTURE_IMAGE_BTN:
             self.capture_image(values)
-        elif event == STOP_CAPTURE_BTN:
-            self.stop_capture()
+        # elif event == STOP_CAPTURE_BTN:
+        #     self.stop_capture()
         elif event == RESET_STAGE_BTN:
             self.reset_stage(values)
         elif event == MOVE_STAGE_BTN:
@@ -622,7 +623,7 @@ class PyHSI:
         elif event == CAPTURE_THREAD_DONE:
             self.window[CAPTURE_IMAGE_PROGRESS].update(0, visible=False)
             self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
-            self.window[STOP_CAPTURE_BTN].update(disabled=True)
+            # self.window[STOP_CAPTURE_BTN].update(disabled=True)
             self.window[RESET_STAGE_BTN].update(disabled=False)
             self.window[MOVE_STAGE_BTN].update(disabled=False)
             self.window[PREVIEW_BTN].update(disabled=False)
@@ -1099,7 +1100,7 @@ class PyHSI:
                 return
             logging.info(f"Moving stage to {target} mm")
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
-            self.window[STOP_CAPTURE_BTN].update(disabled=False)
+            # self.window[STOP_CAPTURE_BTN].update(disabled=False)
             self.window[RESET_STAGE_BTN].update(disabled=True)
             self.window[MOVE_STAGE_BTN].update(disabled=True)
             self.stage.move_to(target, block=True)
@@ -1124,7 +1125,7 @@ class PyHSI:
                 return
             logging.info("Resetting stage")
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
-            self.window[STOP_CAPTURE_BTN].update(disabled=False)
+            # self.window[STOP_CAPTURE_BTN].update(disabled=False)
             self.window[RESET_STAGE_BTN].update(disabled=True)
             self.window[MOVE_STAGE_BTN].update(disabled=True)
             self.stage.reset()
@@ -1138,7 +1139,7 @@ class PyHSI:
         logging.debug("Aborting capture thread")
         self.stage.stop()
         self.window[CAPTURE_IMAGE_BTN].update(disabled=False)
-        self.window[STOP_CAPTURE_BTN].update(disabled=True)
+        # self.window[STOP_CAPTURE_BTN].update(disabled=True)
         self.window[RESET_STAGE_BTN].update(disabled=False)
         self.window[MOVE_STAGE_BTN].update(disabled=False)
         self.window[PREVIEW_BTN].update(disabled=False)
@@ -1155,7 +1156,7 @@ class PyHSI:
             vals = self.parse_values(values)
             logging.info("Starting image capture")
             self.window[CAPTURE_IMAGE_BTN].update(disabled=True)
-            self.window[STOP_CAPTURE_BTN].update(disabled=False)
+            # self.window[STOP_CAPTURE_BTN].update(disabled=False)
             self.window[RESET_STAGE_BTN].update(disabled=True)
             self.window[MOVE_STAGE_BTN].update(disabled=True)
             self.window[PREVIEW_BTN].update(disabled=True)
@@ -1696,13 +1697,13 @@ class PyHSI:
                     tooltip="Move stage to target position... (Ctrl-M)",
                     hidpi=self.hidpi
                 ),
-                get_icon_button(
-                    "stop",
-                    key=STOP_CAPTURE_BTN,
-                    tooltip="Stop image capture (Ctrl-H)",
-                    disabled=True,
-                    hidpi=self.hidpi
-                ),
+                # get_icon_button(
+                #     "stop",
+                #     key=STOP_CAPTURE_BTN,
+                #     tooltip="Stop image capture (Ctrl-H)",
+                #     disabled=True,
+                #     hidpi=self.hidpi
+                # ),
                 get_icon_button(
                     "expand",
                     key=OPEN_IN_VIEWER_BTN,
@@ -1735,7 +1736,11 @@ class Viewer():
         self.root = root
         self.file_path = os.path.abspath(file_path)
         self.file_name = os.path.basename(file_path)
-        self.img = envi.open(file_path)
+        try:
+            self.img = envi.open(file_path)
+        except SpyFileNotFoundError as e:
+            logging.exception(e)
+            return
         self.xy_expand_elements = []
         self.x_expand_elements = []
         self.pseudocolour = True

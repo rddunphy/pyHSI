@@ -108,14 +108,14 @@ class BaslerCamera:
                 img = np.flipud(img)
             if highlight:
                 img = highlight_saturated(img)
-            img = np.asarray(img * 255, dtype="uint8")
+                img = np.rot90(img, 1)
             return img
         else:
             logging.warning("Dropped frame")
             return None
 
     def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
-                     verbose=True, overwrite=False, description=""):
+                     verbose=True, overwrite=False, description="", progress_callback=None):
         """Capture a full hypersepectral image.
 
         File name may contain the following fields:
@@ -150,9 +150,9 @@ class BaslerCamera:
         if not isinstance(ranges[0], tuple) and not isinstance(ranges[0], list):
             ranges = [ranges]
         data = self.capture(stage, ranges, velocity=velocity, flip=flip,
-                            verbose=verbose)
+                            verbose=verbose, progress_callback=progress_callback)
         md = {
-            'acquisition time': acq_time.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'acquisition time': acq_time.astimezone().isoformat(),
             'reflectance scale factor': self.ref_scale_factor,
             'wavelength': self.wl
         }
@@ -166,7 +166,7 @@ class BaslerCamera:
             logging.info(f"Image saved as {file_name}")
         return data, md
 
-    def capture(self, stage, ranges, velocity=None, flip=False, verbose=True):
+    def capture(self, stage, ranges, velocity=None, flip=False, verbose=True, progress_callback=None):
         """Capture a full hypersepectral image.
 
         Args:
@@ -191,23 +191,39 @@ class BaslerCamera:
             n_frames = 0
             total_start_time = timeit.default_timer()
             capture_time = 0
+            d = 0
+            t = 0
+            tmp_pos = stage.get_position()
+            for r in ranges:
+                d += abs(r[0] - r[1])
+                t += round(abs(r[0] - r[1]) / velocity)
+                t += round(abs(tmp_pos - r[0]) / stage.default_velocity)
+                tmp_pos = r[1]
+            t_img = round(d / velocity)
             if verbose:
-                d = 0
-                for r in ranges:
-                    d += abs(r[0] - r[1])
-                t = round(d / velocity)
-                logging.info(f"Imaging {d} mm at {velocity} mm/s (≈{t} s)")
-                now = datetime.now().strftime("%H:%M:%S")
-                logging.info(f"Starting image capture at {now}...")
                 logging.info("Positioning stage...")
+                started = False
             for r in ranges:
                 start = r[0]
                 stop = r[1]
-                stage.move_to(start, block=True)
+                stage.move_to(start, block=False)
+                while stage.is_moving():
+                    # Just positioning stage...
+                    if progress_callback is not None:
+                        p = (timeit.default_timer() - total_start_time) / t
+                        progress_callback(p)
+                if verbose and not started:
+                    started = True
+                    logging.info(f"Imaging {d} mm at {velocity} mm/s (≈{t_img:.2f} s)")
+                    now = datetime.now().strftime("%H:%M:%S")
+                    logging.info(f"Starting image capture at {now}...")
                 stage.move_to(stop, velocity=velocity)
                 self.device.StartGrabbing()
                 range_start_time = timeit.default_timer()
                 while stage.is_moving():
+                    if progress_callback is not None:
+                        p = (timeit.default_timer() - total_start_time) / t
+                        progress_callback(p)
                     grab = self.device.RetrieveResult(
                         5000, pylon.TimeoutHandling_ThrowException)
                     if grab.GrabSucceeded():
@@ -224,8 +240,11 @@ class BaslerCamera:
             self.device.Close()
         if verbose:
             logging.info(f"Total time {total_time:.2f} s")
-            logging.info((f"{n_frames} frames captured in {capture_time:.2f} s "
-                   f"({n_frames/capture_time:.2f} fps)"))
+            logging.info((f"{n_frames} frames captured in {capture_time:.2f} "
+                          f"s ({n_frames/capture_time:.2f} fps / {n_frames/d} "
+                          f"frames per mm)"))
+            if progress_callback is not None:
+                progress_callback(1.0)
         data = np.rot90(np.array(frames, dtype=np.uint16), axes=(1, 2))
         if flip:
             data = np.fliplr(data)
