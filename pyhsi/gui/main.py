@@ -23,7 +23,7 @@ from spectral.io.spyfile import FileNotFoundError as SpyFileNotFoundError
 import tkinter as tk
 
 from .dialogs import CalibrationDialog, CropDialog
-from .graphics import (get_application_icon_path, get_icon_button,
+from .graphics import (get_application_icon, get_icon_button,
                        set_button_icon, resize_img_to_area)
 from .. import __version__
 from ..cameras import BaslerCamera, MockCamera
@@ -145,6 +145,7 @@ HYPERCUBE_BTN = "ViewHypercubeButton"
 # Global configuration and logging settings
 ###############################################################################
 
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 # Input fields that are saved in config files
 CONFIG_KEYS = (
     CAMERA_TYPE_SEL, CAMERA_MOCK_FILE, EXP_INPUT, BINNING_SEL, GAIN_INPUT,
@@ -158,7 +159,7 @@ CONFIG_KEYS = (
 
 # Config file versions that are compatible with this version of PyHSI
 CONFIG_COMPAT_VERSIONS = ("0.2.0")
-DEFAULT_CONFIG_PATH = os.path.abspath("default_config.phc")
+DEFAULT_CONFIG_PATH = os.path.join(ROOT_DIR, "default_config.phc")
 
 LOG_COLOURS = {
     "DEBUG": "grey",
@@ -167,7 +168,7 @@ LOG_COLOURS = {
     "ERROR": "red",
     "CRITICAL": "red"
 }
-LOG_FILE_PATH = os.path.abspath("pyhsi.log")
+LOG_FILE_PATH = os.path.join(ROOT_DIR, "pyhsi.log")
 
 # Allow ENVI header files with uppercase parameters
 spectral.settings.envi_support_nonlowercase_params = True
@@ -446,7 +447,7 @@ class PyHSI:
         self.hidpi = hidpi
 
         # Global PySimpleGUI options
-        sg.set_global_icon(get_application_icon_path())
+        sg.set_global_icon(get_application_icon())
         sg.set_options(font=("latin modern sans", 12))
 
         # PySimpleGUI layout
@@ -529,6 +530,7 @@ class PyHSI:
         logging.debug(f"Window size: {self.window.size}")
 
         # Load default configuration
+        logging.debug(config)
         if config is None:
             if os.path.isfile(DEFAULT_CONFIG_PATH):
                 self.load_config(config_file=DEFAULT_CONFIG_PATH)
