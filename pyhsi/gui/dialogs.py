@@ -36,6 +36,9 @@ class CalibrationDialog:
         output_file = os.path.splitext(file_path)[0] + "_calibrated.hdr"
         layout = [
             [
+                sg.Checkbox("Use external file for white reference", enable_events=True, key="UseWhiteFile")
+            ],
+            [sg.pin(sg.Column([[
                 sg.Column([
                     [
                         sg.Text("Calibration tile")
@@ -60,7 +63,19 @@ class CalibrationDialog:
                 sg.Column([[
                     sg.Image(key="Image", size=(self.preview.shape[0], self.preview.shape[1]))
                 ]])
-            ],
+            ]], key="WhiteSelectPane"))],
+            [sg.pin(sg.Column([[
+                sg.Text("White reference", pad=(3, 0), size=(15, 1)),
+                sg.Input("", key="WhiteRefPath", size=(35, 1)),
+                get_icon_button(
+                    "open",
+                    button_type=sg.BUTTON_TYPE_BROWSE_FILE,
+                    file_types=(("ENVI", "*.hdr"),),
+                    initial_folder=self.folder,
+                    tooltip="Browse...",
+                    hidpi=root.hidpi
+                )
+            ]], key="WhiteFilePane", visible=False))],
             [
                 sg.Text("Dark reference", pad=(3, 0), size=(15, 1)),
                 sg.Input(dark_ref_file, key="DarkRefPath", size=(35, 1)),
@@ -111,6 +126,10 @@ class CalibrationDialog:
             if e == "Ok":
                 self.calibrate(v)
                 break
+            if e == "UseWhiteFile":
+                use_file = v["UseWhiteFile"]
+                self.window["WhiteFilePane"].update(visible=use_file)
+                self.window["WhiteSelectPane"].update(visible=not use_file)
             elif e in ("Slider_i1", "Slider_i2"):
                 self.update_frames(int(v["Slider_i1"]), int(v["Slider_i2"]))
             else:  # Cancel, window closed, etc.
@@ -134,10 +153,14 @@ class CalibrationDialog:
 
     def calibrate(self, v):
         """Perform one-point calibration"""
-        i1 = int(v["Slider_i1"])
-        i2 = int(v["Slider_i2"])
         S = self.img.asarray()
-        W = S[i1:i2, :, :]
+        if v["UseWhiteFile"]:
+            w_img = envi.open(v["WhiteRefPath"])
+            W = w_img.asarray()
+        else:
+            i1 = int(v["Slider_i1"])
+            i2 = int(v["Slider_i2"])
+            W = S[i1:i2, :, :]
         if 'interleave' in self.img.metadata:
             interleave = self.img.metadata['interleave']
         else:
