@@ -12,7 +12,7 @@ import sys
 import threading
 
 import cv2
-import dateutil
+import dateutil.parser
 import numpy as np
 import PySimpleGUI as sg
 import serial

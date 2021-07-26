@@ -241,8 +241,8 @@ class BaslerCamera:
         if verbose:
             logging.info(f"Total time {total_time:.2f} s")
             logging.info((f"{n_frames} frames captured in {capture_time:.2f} "
-                          f"s ({n_frames/capture_time:.2f} fps / {n_frames/d} "
-                          f"frames per mm)"))
+                          f"s ({n_frames/capture_time:.2f} fps / "
+                          f"{n_frames/d:.2f} frames per mm)"))
             if progress_callback is not None:
                 progress_callback(1.0)
         data = np.rot90(np.array(frames, dtype=np.uint16), axes=(1, 2))
