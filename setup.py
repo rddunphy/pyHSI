@@ -10,7 +10,7 @@ setup(
     author_email='david.dunphy@strath.ac.uk',
     license='MIT',
     packages=['pyhsi'],
-    scripts=['PyHSI'],
+    scripts=['PyHSI.py'],
     install_requires=[
         'numpy>=1.19',
         'opencv-python>=4.4',

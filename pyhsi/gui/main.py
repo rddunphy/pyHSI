@@ -27,6 +27,7 @@ from .graphics import (get_application_icon, get_icon_button,
                        set_button_icon, resize_img_to_area)
 from .. import __version__
 from ..cameras import BaslerCamera, MockCamera
+from ..preprocessing import one_point_calibration
 from ..stages import TSA200, MockStage
 from ..utils import get_rgb_bands, add_wavelength_labels
 
@@ -99,6 +100,10 @@ OUTPUT_FOLDER = "OutputFolder"
 OUTPUT_FOLDER_BROWSE = "OutputFolderBrowseButton"
 SAVE_FILE = "SaveFileName"
 IMAGE_DESCRIPTION_INPUT = "ImageDescription"
+AUTO_CALIBRATE_CB = "AutoCalibrateCheckbox"
+AUTO_CALIBRATE_PANE = "AutoCalibratePane"
+AUTO_CALIBRATE_WHITE_REF_FILE = "AutoCalibrateWhiteRefFile"
+AUTO_CALIBRATE_DARK_REF_FILE = "AutoCalibrateDarkRefFile"
 CAPTURE_IMAGE_BTN = "CaptureImage"
 # STOP_CAPTURE_BTN = "StopImageCapture"
 RESET_STAGE_BTN = "ResetStageButton"
@@ -154,7 +159,8 @@ CONFIG_KEYS = (
     PREVIEW_SINGLE_BAND_SLIDER, PREVIEW_RED_BAND_SLIDER,
     PREVIEW_GREEN_BAND_SLIDER, PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB,
     PREVIEW_INTERP_CB, OUTPUT_FORMAT_SEL, OUTPUT_FOLDER, SAVE_FILE,
-    IMAGE_DESCRIPTION_INPUT, APP_VERSION
+    IMAGE_DESCRIPTION_INPUT, AUTO_CALIBRATE_CB, AUTO_CALIBRATE_WHITE_REF_FILE,
+    AUTO_CALIBRATE_DARK_REF_FILE, APP_VERSION
 )
 
 # Config file versions that are compatible with this version of PyHSI
@@ -444,6 +450,7 @@ class PyHSI:
         self.viewer_img = None
         self.capture_thread = None
         self.captured_file = None
+        self.autocalibrate = False
         self.hidpi = hidpi
 
         # Global PySimpleGUI options
@@ -599,7 +606,8 @@ class PyHSI:
                      RANGE_END_INPUT):
             self.validate(event)
         elif event in (PREVIEW_WATERFALL_CB, PREVIEW_PSEUDOCOLOUR_CB,
-                       CAMERA_TYPE_SEL, STAGE_TYPE_SEL, GAIN_INPUT):
+                       CAMERA_TYPE_SEL, STAGE_TYPE_SEL, GAIN_INPUT,
+                       AUTO_CALIBRATE_CB):
             self.update_view(values)
         elif event == BINNING_SEL:
             self.camera.set_binning(int(values[BINNING_SEL]))
@@ -793,6 +801,8 @@ class PyHSI:
         rgb_vis = not pc_disabled and values[PREVIEW_PSEUDOCOLOUR_CB]
         self.window[PREVIEW_RGB_BAND_PANE].update(visible=rgb_vis)
         self.window[PREVIEW_SINGLE_BAND_PANE].update(visible=single_vis)
+        self.autocalibrate = values[AUTO_CALIBRATE_CB]
+        self.window[AUTO_CALIBRATE_PANE].update(visible=self.autocalibrate)
         if not self.live_preview_active:
             self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
         if values[STAGE_TYPE_SEL] == STAGE_TYPE_MOCK:
@@ -1192,9 +1202,23 @@ class PyHSI:
                 raise ValueError(msg)
             logging.debug(f"Capturing image with file_name='{file_name}' and description='{description}'")
             [img, md] = self.camera.capture_save(
-                file_name, self.stage, vals['ranges'], vals['velocity'],
+                self.stage, vals['ranges'], vals['velocity'],
                 flip=vals['flip'], verbose=True, description=description,
                 progress_callback=self.capture_image_progress_callback)
+            if self.autocalibrate:
+                logging.info("Calibrating image...")
+                try:
+                    white_ref = envi.open(values[AUTO_CALIBRATE_WHITE_REF_FILE])
+                    dark_ref = envi.open(values[AUTO_CALIBRATE_DARK_REF_FILE])
+                except SpyFileNotFoundError as e:
+                    logging.exception(e)
+                    return
+                W = white_ref.asarray()
+                D = dark_ref.asarray()
+                img = one_point_calibration(img, W, D, scale_factor=self.camera.ref_scale_factor)
+            envi.save_image(file_name, img, dtype='uint16', interleave='bil',
+                            ext='.raw', metadata=md, force=False)
+            logging.info(f"Image saved as {file_name}")
             self.show_captured_preview(img / self.camera.ref_scale_factor,
                                        md['wavelength'])
             self.captured_file = file_name
@@ -1319,6 +1343,7 @@ class PyHSI:
                     get_icon_button(
                         "open",
                         button_type=sg.BUTTON_TYPE_BROWSE_FILE,
+                        target=CAMERA_MOCK_FILE,
                         file_types=(("ENVI", "*.hdr"),),
                         initial_folder=self.default_folder,
                         tooltip="Browse...",
@@ -1620,7 +1645,7 @@ class PyHSI:
         #######################################################################
 
         formats = [FORMAT_ENVI]
-        file_names = ["{date}_{n}", "{date}_dark_ref"]
+        file_names = ["{date}_{n}", "{date}_dark_ref", "{date}_white_ref_{n}"]
         description_multiline = sg.Multiline(
             size=(30, 3),
             key=IMAGE_DESCRIPTION_INPUT
@@ -1680,6 +1705,60 @@ class PyHSI:
                     pad=label_pad
                 ),
                 description_multiline
+            ],
+            [
+                sg.Checkbox(
+                    "Auto-calibrate",
+                    key=AUTO_CALIBRATE_CB,
+                    enable_events=True,
+                    default=self.autocalibrate
+                )
+            ],
+            [
+                sg.pin(sg.Column([[
+                    sg.Text(
+                        "White ref.",
+                        size=label_size,
+                        pad=label_pad
+                    ),
+                    sg.Input(
+                        "",
+                        size=(20, 1),
+                        key=AUTO_CALIBRATE_WHITE_REF_FILE,
+                        enable_events=False
+                    ),
+                    get_icon_button(
+                        "open",
+                        button_type=sg.BUTTON_TYPE_BROWSE_FILE,
+                        target=AUTO_CALIBRATE_WHITE_REF_FILE,
+                        file_types=(("ENVI", "*.hdr"),),
+                        initial_folder=self.default_folder,
+                        tooltip="Browse...",
+                        hidpi=self.hidpi
+                    )
+                ],
+                [
+                    sg.Text(
+                        "Dark ref.",
+                        size=label_size,
+                        pad=label_pad
+                    ),
+                    sg.Input(
+                        "",
+                        size=(20, 1),
+                        key=AUTO_CALIBRATE_DARK_REF_FILE,
+                        enable_events=False
+                    ),
+                    get_icon_button(
+                        "open",
+                        button_type=sg.BUTTON_TYPE_BROWSE_FILE,
+                        target=AUTO_CALIBRATE_DARK_REF_FILE,
+                        file_types=(("ENVI", "*.hdr"),),
+                        initial_folder=self.default_folder,
+                        tooltip="Browse...",
+                        hidpi=self.hidpi
+                    )
+                ]], key=AUTO_CALIBRATE_PANE, pad=(0, 0), visible=False))
             ],
             [
                 get_icon_button(

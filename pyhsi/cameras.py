@@ -114,8 +114,8 @@ class BaslerCamera:
             logging.warning("Dropped frame")
             return None
 
-    def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
-                     verbose=True, overwrite=False, description="", progress_callback=None):
+    def capture_save(self, stage, ranges, velocity=None, flip=False,
+                     verbose=True, description="", progress_callback=None):
         """Capture a full hypersepectral image.
 
         File name may contain the following fields:
@@ -139,7 +139,6 @@ class BaslerCamera:
             stage: linear translation stage
             ranges: list of ranges or single range to image, of the form
                     (start, stop)
-            overwrite: overwrite existing files without prompt
 
         Kwargs:
             velocity: stage velocity (in mm/s)
@@ -159,11 +158,6 @@ class BaslerCamera:
         description = description.strip()
         if description != "":
             md['description'] = description
-        envi.save_image(file_name, data, dtype='uint16',
-                        interleave='bil', ext='.raw', metadata=md,
-                        force=overwrite)
-        if verbose:
-            logging.info(f"Image saved as {file_name}")
         return data, md
 
     def capture(self, stage, ranges, velocity=None, flip=False, verbose=True, progress_callback=None):
@@ -318,8 +312,8 @@ class MockCamera:
         else:
             logging.debug("Result image hasn't changed")
 
-    def capture_save(self, file_name, stage, ranges, velocity=None, flip=False,
-                     verbose=True, overwrite=False, description="",
+    def capture_save(self, stage, ranges, velocity=None, flip=False,
+                     verbose=True, description="",
                      progress_callback=None):
         """Capture a full hypersepectral image.
 
@@ -344,7 +338,6 @@ class MockCamera:
             stage: linear translation stage
             ranges: list of ranges or single range to image, of the form
                     (start, stop)
-            overwrite: overwrite existing files without prompt
 
         Kwargs:
             velocity: stage velocity (in mm/s)
@@ -364,11 +357,6 @@ class MockCamera:
         description = description.strip()
         if description != "":
             md['description'] = description
-        envi.save_image(file_name, data, dtype='uint16',
-                        interleave='bil', ext='.raw', metadata=md,
-                        force=overwrite)
-        if verbose:
-            logging.info(f"Image saved as {file_name}")
         return data, md
 
     def capture(self, stage, ranges, velocity=None, flip=False, verbose=True,
