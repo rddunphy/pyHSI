@@ -52,6 +52,7 @@ CAMERA_MOCK_FILE = "MockCameraFilePath"
 CAMERA_MOCK_FILE_BROWSE = "CameraMockFileBrowseButton"
 CAMERA_MOCK_CONTROL_PANE = "CameraMockControlPanel"
 CAMERA_REAL_CONTROL_PANE = "CameraRealControlPanel"
+CAMERA_CONFIGURATION_BTN = "CameraConfigurationButton"
 EXP_INPUT = "ExposureTimeMS"
 EXP_FDB = "ExposureFeedback"
 BINNING_SEL = "PixelBinning"
@@ -104,6 +105,7 @@ AUTO_CALIBRATE_CB = "AutoCalibrateCheckbox"
 AUTO_CALIBRATE_PANE = "AutoCalibratePane"
 AUTO_CALIBRATE_WHITE_REF_FILE = "AutoCalibrateWhiteRefFile"
 AUTO_CALIBRATE_DARK_REF_FILE = "AutoCalibrateDarkRefFile"
+SAVE_PREVIEW_CB = "SavePreviewCheckbox"
 CAPTURE_IMAGE_BTN = "CaptureImage"
 # STOP_CAPTURE_BTN = "StopImageCapture"
 RESET_STAGE_BTN = "ResetStageButton"
@@ -159,8 +161,8 @@ CONFIG_KEYS = (
     PREVIEW_SINGLE_BAND_SLIDER, PREVIEW_RED_BAND_SLIDER,
     PREVIEW_GREEN_BAND_SLIDER, PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB,
     PREVIEW_INTERP_CB, OUTPUT_FORMAT_SEL, OUTPUT_FOLDER, SAVE_FILE,
-    IMAGE_DESCRIPTION_INPUT, AUTO_CALIBRATE_CB, AUTO_CALIBRATE_WHITE_REF_FILE,
-    AUTO_CALIBRATE_DARK_REF_FILE, APP_VERSION
+    IMAGE_DESCRIPTION_INPUT, SAVE_PREVIEW_CB, AUTO_CALIBRATE_CB,
+    AUTO_CALIBRATE_WHITE_REF_FILE, AUTO_CALIBRATE_DARK_REF_FILE, APP_VERSION
 )
 
 # Config file versions that are compatible with this version of PyHSI
@@ -209,7 +211,8 @@ Controls related to camera hardware setup:
 
 * Model: Select camera model. Currently only supports the Basler piA1600 \
 VNIR camera. The mock camera allows the behaviour of a camera to be simulated \
-using an existing source file for testing purposes.
+using an existing source file for testing purposes. The network button to the \
+right of the select box attempts to open the Basler IP configurator app.
 * Exposure time: Sets the exposure time of the camera in ms.
 * Binning: Sets the pixel binning of the camera in both axes.
 * Gain: Sets the camera's raw gain value. Actual gain in dB is displayed to \
@@ -256,11 +259,14 @@ ENVI standard.
 f-string fields; see File name templates section below for details.
 * Description: Description to include in image metadata. Accepts Python \
 f-string fields; see File name templates section below for details.
+* Auto-calibrate: Automatically calibrate the file before saving using \
+previously captured white and dark reference files.
+* Save preview as .png: Saves a preview of the image to the same location as \
+the HSI data.
 * Control buttons:
     - Capture and save image
     - Reset stage to minimum
     - Move stage to target position
-    - Cancel image capture and stop stage
     - Open the last captured image in the viewer
 
 
@@ -612,6 +618,8 @@ class PyHSI:
         elif event == BINNING_SEL:
             self.camera.set_binning(int(values[BINNING_SEL]))
             self.update_preview_slider_ranges(values)
+        elif event == CAMERA_CONFIGURATION_BTN:
+            self.camera_configuration(values[CAMERA_TYPE_SEL])
         elif event == CAMERA_MOCK_FILE:
             file_name = values[CAMERA_MOCK_FILE]
             try:
@@ -781,9 +789,11 @@ class PyHSI:
         if values[CAMERA_TYPE_SEL] == CAMERA_TYPE_MOCK:
             self.window[CAMERA_MOCK_CONTROL_PANE].update(visible=True)
             self.window[CAMERA_REAL_CONTROL_PANE].update(visible=False)
+            self.window[CAMERA_CONFIGURATION_BTN].update(disabled=True)
         else:
             self.window[CAMERA_MOCK_CONTROL_PANE].update(visible=False)
             self.window[CAMERA_REAL_CONTROL_PANE].update(visible=True)
+            self.window[CAMERA_CONFIGURATION_BTN].update(disabled=False)
         try:
             self.setup_camera(values)
         except ValueError as e:
@@ -809,6 +819,16 @@ class PyHSI:
             self.window[STAGE_PORT_PANE].update(visible=False)
         else:
             self.window[STAGE_PORT_PANE].update(visible=True)
+
+    def camera_configuration(self, camera_type):
+        if camera_type == CAMERA_TYPE_BASLER:
+            try:
+                # TODO: Let user specify path somehow, and point them towards
+                # download page at
+                # https://www.baslerweb.com/en/sales-support/downloads/software-downloads/
+                subprocess.Popen(['/opt/pylon/bin/ipconfigurator'])
+            except FileNotFoundError as e:
+                logging.exception(e)
 
     def set_default_folder(self, folder, warn=True):
         """Change folder used as initial folder for dialogs"""
@@ -1065,9 +1085,8 @@ class PyHSI:
         frame = cv2.imencode('.png', frame)[1].tobytes()
         self.window[PREVIEW_CANVAS].update(data=frame)
 
-    def show_captured_preview(self, img, wl):
+    def show_captured_preview(self, band):
         """Display a preview of the image that has just been captured"""
-        band = img[:, :, len(wl)//2]
         band = np.asarray(band * 255, dtype="uint8")
         band = resize_img_to_area(band, self.window[PREVIEW_FRAME].get_size())
         band = cv2.imencode('.png', band)[1].tobytes()
@@ -1162,6 +1181,8 @@ class PyHSI:
 
     def capture_image_thread(self, values):
         """Capture and save an image"""
+        captured = False
+        saved = False
         try:
             self.setup_camera(values)
             if not self.setup_stage(values):
@@ -1192,15 +1213,22 @@ class PyHSI:
                 "n": 0
             }
             try:
-                file_name = template_to_file_name(
-                    values[OUTPUT_FOLDER], values[SAVE_FILE], fields, '.hdr')
+                if values[SAVE_FILE].strip() != "":
+                    file_name = template_to_file_name(
+                        values[OUTPUT_FOLDER], values[SAVE_FILE], fields, '.hdr')
+                else:
+                    logging.warning("No save location specified")
+                    file_name = None
                 description = values[IMAGE_DESCRIPTION_INPUT].format(**fields)
                 description = description.strip()
             except KeyError as e:
                 fs = ", ".join(fields.keys())
                 msg = f"{{{e}}} is not a valid field name (choose from {fs})"
                 raise ValueError(msg)
-            logging.debug(f"Capturing image with file_name='{file_name}' and description='{description}'")
+            if file_name is None:
+                logging.debug("Capturing image without save location")
+            else:
+                logging.debug(f"Capturing image with file_name='{file_name}' and description='{description}'")
             [img, md] = self.camera.capture_save(
                 self.stage, vals['ranges'], vals['velocity'],
                 flip=vals['flip'], verbose=True, description=description,
@@ -1216,14 +1244,33 @@ class PyHSI:
                 W = white_ref.asarray()
                 D = dark_ref.asarray()
                 img = one_point_calibration(img, W, D, scale_factor=self.camera.ref_scale_factor)
-            envi.save_image(file_name, img, dtype='uint16', interleave='bil',
-                            ext='.raw', metadata=md, force=False)
-            logging.info(f"Image saved as {file_name}")
-            self.show_captured_preview(img / self.camera.ref_scale_factor,
-                                       md['wavelength'])
-            self.captured_file = file_name
+            captured = True
+            preview = img[:, :, get_rgb_bands(md['wavelength'])[::-1]].astype(float)
+            preview /= self.camera.ref_scale_factor
+            self.show_captured_preview(preview)
+            if file_name is not None:
+                envi.save_image(file_name, img, dtype='uint16', interleave='bil',
+                                ext='.raw', metadata=md, force=False)
+                saved = True
+                logging.info(f"Image saved as {file_name}")
+                self.captured_file = file_name
+                if values[SAVE_PREVIEW_CB]:
+                    png_name, _ = os.path.splitext(file_name)
+                    png_name += ".png"
+                    preview *= 255
+                    cv2.imwrite(png_name, preview.astype(int))
+            else:
+                logging.warning("File not saved")
+                # TODO: queue event to prompt for save location if file_name is
+                # None
         except Exception as e:
-            logging.exception(f"Unable to capture image: {e}")
+            msg = f"Processing error after saving image: {e}"
+            if not captured:
+                msg = f"Unable to capture image: {e}"
+            elif not saved:
+                msg = f"Unable to save captured image: {e}"
+            logging.exception(msg)
+            # TODO: Prompt to try saving again if captured but not saved
         finally:
             self.window.write_event_value(CAPTURE_THREAD_DONE, '')
 
@@ -1325,6 +1372,12 @@ class PyHSI:
                     enable_events=True,
                     key=CAMERA_TYPE_SEL,
                     readonly=True
+                ),
+                get_icon_button(
+                    "network",
+                    tooltip="Configure IP...",
+                    key=CAMERA_CONFIGURATION_BTN,
+                    hidpi=self.hidpi
                 )
             ],
             [
@@ -1761,6 +1814,12 @@ class PyHSI:
                 ]], key=AUTO_CALIBRATE_PANE, pad=(0, 0), visible=False))
             ],
             [
+                sg.Checkbox(
+                    "Save preview as .png",
+                    key=SAVE_PREVIEW_CB
+                )
+            ],
+            [
                 get_icon_button(
                     "camera",
                     key=CAPTURE_IMAGE_BTN,
@@ -1992,9 +2051,9 @@ class Viewer():
         if sg.running_windows():
             os.startfile(file_path)
         elif sg.running_mac():
-            subprocess.call(["open", file_path])
+            subprocess.Popen(["open", file_path])
         elif sg.running_linux():
-            subprocess.call(["xdg-open", file_path])
+            subprocess.Popen(["xdg-open", file_path])
         else:
             logging.error("Operation not supported for this operating system")
 

@@ -17,14 +17,15 @@ def find_white_frames(S, threshold=0.99):
 
 
 def one_point_calibration(S, W, B, scale_factor=None):
+    dtype = S.dtype
     W = np.mean(W, axis=0)
     B = np.mean(B, axis=0)
     with np.errstate(invalid='ignore', divide='ignore'):
-        div = (W - B)
-        X = np.where(div > 0, np.divide(S - B, div), 0)
-        X[X > 1] = 1
-        X[X < 0] = 0
+        W -= B
+        S -= B
+        S = np.where(div > 0, np.divide(S, W), 0)
+        S[S > 1] = 1
+        S[S < 0] = 0
         if scale_factor is not None:
-            X = X * scale_factor
-            X = np.asarray(X, dtype=S.dtype)
-        return X
+            S = S * scale_factor
+        return np.asarray(S, dtype=dtype)
