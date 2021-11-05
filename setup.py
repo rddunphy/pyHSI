@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='pyhsi',
-    version='0.2.0',
+    version='0.2.1',
     description='Hyperspectral imaging library',
     url='https://github.com/rddunphy/pyHSI',
     author='R. David Dunphy',

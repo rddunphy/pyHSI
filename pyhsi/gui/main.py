@@ -27,7 +27,7 @@ from .graphics import (get_application_icon, get_icon_button,
                        set_button_icon, resize_img_to_area)
 from .. import __version__
 from ..cameras import BaslerCamera, MockCamera
-from ..preprocessing import one_point_calibration
+from ..preprocessing import find_white_frames, one_point_calibration
 from ..stages import TSA200, MockStage
 from ..utils import get_rgb_bands, add_wavelength_labels
 
@@ -99,11 +99,13 @@ OUTPUT_FOLDER = "OutputFolder"
 OUTPUT_FOLDER_BROWSE = "OutputFolderBrowseButton"
 SAVE_FILE = "SaveFileName"
 IMAGE_DESCRIPTION_INPUT = "ImageDescription"
-AUTO_CALIBRATE_CB = "AutoCalibrateCheckbox"
+AUTO_CALIBRATE_CB = "AutoCalibrate"
+DETECT_WHITE_TILE_CB = "AutoCalibrateDetectWhiteTile"
 AUTO_CALIBRATE_PANE = "AutoCalibratePane"
 AUTO_CALIBRATE_WHITE_REF_FILE = "AutoCalibrateWhiteRefFile"
+AUTO_CALIBRATE_WHITE_REF_FILE_BTN = "AutoCalibrateWhiteRefFileBrowseButton"
 AUTO_CALIBRATE_DARK_REF_FILE = "AutoCalibrateDarkRefFile"
-SAVE_PREVIEW_CB = "SavePreviewCheckbox"
+SAVE_PREVIEW_CB = "SavePreview"
 CAPTURE_IMAGE_BTN = "CaptureImage"
 # STOP_CAPTURE_BTN = "StopImageCapture"
 RESET_STAGE_BTN = "ResetStageButton"
@@ -160,11 +162,11 @@ CONFIG_KEYS = (
     PREVIEW_GREEN_BAND_SLIDER, PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB,
     PREVIEW_INTERP_CB, OUTPUT_FOLDER, SAVE_FILE, IMAGE_DESCRIPTION_INPUT,
     SAVE_PREVIEW_CB, AUTO_CALIBRATE_CB, AUTO_CALIBRATE_WHITE_REF_FILE,
-    AUTO_CALIBRATE_DARK_REF_FILE, APP_VERSION
+    AUTO_CALIBRATE_DARK_REF_FILE, DETECT_WHITE_TILE_CB, APP_VERSION
 )
 
 # Config file versions that are compatible with this version of PyHSI
-CONFIG_COMPAT_VERSIONS = ("0.2.0")
+CONFIG_COMPAT_VERSIONS = ("0.2.0", "0.2.1")
 DEFAULT_CONFIG_PATH = os.path.join(ROOT_DIR, "default_config.phc")
 
 LOG_COLOURS = {
@@ -461,7 +463,6 @@ class PyHSI:
         self.viewer_img = None
         self.capture_thread = None
         self.captured_file = None
-        self.autocalibrate = False
         self.hidpi = hidpi
 
         # Global PySimpleGUI options
@@ -614,13 +615,14 @@ class PyHSI:
 
     def handle_event(self, event, values):
         """Event triaging"""
-        logging.debug(f"Handling {event} event")
+        if event != CAPTURE_THREAD_PROGRESS:
+            logging.debug(f"Handling {event} event")
         if event in (EXP_INPUT, VELOCITY_INPUT, RANGE_START_INPUT,
                      RANGE_END_INPUT):
             self.validate(event)
         elif event in (PREVIEW_WATERFALL_CB, PREVIEW_PSEUDOCOLOUR_CB,
                        CAMERA_TYPE_SEL, STAGE_TYPE_SEL, GAIN_INPUT,
-                       AUTO_CALIBRATE_CB):
+                       AUTO_CALIBRATE_CB, DETECT_WHITE_TILE_CB):
             self.update_view(values)
         elif event == BINNING_SEL:
             self.camera.set_binning(int(values[BINNING_SEL]))
@@ -818,8 +820,9 @@ class PyHSI:
         rgb_vis = not pc_disabled and values[PREVIEW_PSEUDOCOLOUR_CB]
         self.window[PREVIEW_RGB_BAND_PANE].update(visible=rgb_vis)
         self.window[PREVIEW_SINGLE_BAND_PANE].update(visible=single_vis)
-        self.autocalibrate = values[AUTO_CALIBRATE_CB]
-        self.window[AUTO_CALIBRATE_PANE].update(visible=self.autocalibrate)
+        self.window[AUTO_CALIBRATE_PANE].update(visible=values[AUTO_CALIBRATE_CB])
+        self.window[AUTO_CALIBRATE_WHITE_REF_FILE].update(disabled=values[DETECT_WHITE_TILE_CB])
+        self.window[AUTO_CALIBRATE_WHITE_REF_FILE_BTN].update(disabled=values[DETECT_WHITE_TILE_CB])
         if not self.live_preview_active:
             self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
         if values[STAGE_TYPE_SEL] == STAGE_TYPE_MOCK:
@@ -1092,12 +1095,26 @@ class PyHSI:
         frame = cv2.imencode('.png', frame)[1].tobytes()
         self.window[PREVIEW_CANVAS].update(data=frame)
 
-    def show_captured_preview(self, band):
+    def show_captured_preview(self, preview, white_frames=None):
         """Display a preview of the image that has just been captured"""
-        band = np.asarray(band * 255, dtype="uint8")
-        band = resize_img_to_area(band, self.window[PREVIEW_FRAME].get_size())
-        band = cv2.imencode('.png', band)[1].tobytes()
-        self.window[PREVIEW_CANVAS].update(data=band)
+        preview = np.asarray(preview * 255, dtype="uint8")
+        size = self.window[PREVIEW_FRAME].get_size()
+        s0 = preview.shape[0]
+        preview = resize_img_to_area(preview, size)
+        view_scale = preview.shape[0] / s0
+        if white_frames is not None:
+            # Highlight white reference frames
+            i1 = round(white_frames[0] * view_scale)
+            i2 = round(white_frames[1] * view_scale)
+            max_x = preview.shape[1] - 1
+            c = (0, 0, 255)  # Use red for overlay
+            preview = cv2.line(preview, (0, i1), (max_x, i1), c)
+            preview = cv2.line(preview, (0, i2), (max_x, i2), c)
+            overlay = np.zeros(preview.shape, np.uint8)
+            overlay = cv2.rectangle(overlay, (0, i1), (max_x, i2), c, -1)
+            preview = cv2.addWeighted(overlay, 0.25, preview, 0.75, 0)
+        preview = cv2.imencode('.png', preview)[1].tobytes()
+        self.window[PREVIEW_CANVAS].update(data=preview)
 
     def capture_image(self, values):
         """Start capturing image in new thread"""
@@ -1240,21 +1257,28 @@ class PyHSI:
                 self.stage, vals['ranges'], vals['velocity'],
                 flip=vals['flip'], verbose=True, description=description,
                 progress_callback=self.capture_image_progress_callback)
-            if self.autocalibrate:
+            if values[AUTO_CALIBRATE_CB]:
                 logging.info("Calibrating image...")
                 try:
-                    white_ref = envi.open(values[AUTO_CALIBRATE_WHITE_REF_FILE])
+                    if values[DETECT_WHITE_TILE_CB]:
+                        white_frames = find_white_frames(img)
+                        W = img[white_frames[0]:white_frames[1], :, :]
+                    else:
+                        white_ref = envi.open(values[AUTO_CALIBRATE_WHITE_REF_FILE])
+                        W = white_ref.asarray()
                     dark_ref = envi.open(values[AUTO_CALIBRATE_DARK_REF_FILE])
+                    D = dark_ref.asarray()
                 except SpyFileNotFoundError as e:
                     logging.exception(e)
                     return
-                W = white_ref.asarray()
-                D = dark_ref.asarray()
                 img = one_point_calibration(img, W, D, scale_factor=self.camera.ref_scale_factor)
             captured = True
             preview = img[:, :, get_rgb_bands(md['wavelength'])[::-1]].astype(float)
             preview /= self.camera.ref_scale_factor
-            self.show_captured_preview(preview)
+            if values[AUTO_CALIBRATE_CB] and values[DETECT_WHITE_TILE_CB]:
+                self.show_captured_preview(preview, white_frames=white_frames)
+            else:
+                self.show_captured_preview(preview)
             if file_name is not None:
                 envi.save_image(file_name, img, dtype='uint16', interleave='bil',
                                 ext='.raw', metadata=md, force=False)
@@ -1759,11 +1783,19 @@ class PyHSI:
                     "Auto-calibrate",
                     key=AUTO_CALIBRATE_CB,
                     enable_events=True,
-                    default=self.autocalibrate
+                    default=False
                 )
             ],
             [
                 sg.pin(sg.Column([[
+                    sg.Checkbox(
+                        "Detect white tile",
+                        key=DETECT_WHITE_TILE_CB,
+                        enable_events=True,
+                        default=False
+                    ),
+                ],
+                [
                     sg.Text(
                         "White ref.",
                         size=label_size,
@@ -1779,6 +1811,7 @@ class PyHSI:
                         "open",
                         button_type=sg.BUTTON_TYPE_BROWSE_FILE,
                         target=AUTO_CALIBRATE_WHITE_REF_FILE,
+                        key=AUTO_CALIBRATE_WHITE_REF_FILE_BTN,
                         file_types=(("ENVI", "*.hdr"),),
                         initial_folder=self.default_folder,
                         tooltip="Browse...",

@@ -2,8 +2,14 @@ import logging
 import numpy as np
 
 
-def find_white_frames(S, threshold=0.99):
+def moving_average(a, n=3):
+    kernel = np.ones(n) / n
+    return np.convolve(a, kernel, mode='same')
+
+
+def find_white_frames(S, threshold=0.9):
     f = np.mean(S, axis=(1, 2))
+    f = moving_average(f, n=5)
     imax = np.argmax(f)
     w = threshold * f[imax]
     i1 = imax
@@ -18,12 +24,12 @@ def find_white_frames(S, threshold=0.99):
 
 def one_point_calibration(S, W, B, scale_factor=None):
     dtype = S.dtype
-    W = np.mean(W, axis=0)
-    B = np.mean(B, axis=0)
+    W = np.median(W, axis=0)
+    B = np.median(B, axis=0)
     with np.errstate(invalid='ignore', divide='ignore'):
-        W -= B
-        S -= B
-        S = np.where(div > 0, np.divide(S, W), 0)
+        W = W - B
+        S = S - B
+        S = np.where(W > 0, np.divide(S, W), 0)
         S[S > 1] = 1
         S[S < 0] = 0
         if scale_factor is not None:
