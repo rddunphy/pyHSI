@@ -176,7 +176,8 @@ LOG_COLOURS = {
     "ERROR": "red",
     "CRITICAL": "red"
 }
-LOG_FILE_PATH = os.path.join(ROOT_DIR, "pyhsi.log")
+LOG_FILE_PATH = os.path.join(ROOT_DIR, "log")
+LATEST_LOG_SYMLINK = os.path.join(LOG_FILE_PATH, "pyhsi.log")
 
 DEFAULT_FILE_NAMES = [
     "{date}_{n:03}",
@@ -356,18 +357,23 @@ and/or sample using waterfall preview
 ###############################################################################
 
 
-class LoggingHandler(logging.StreamHandler):
+class ConsoleLoggingHandler(logging.StreamHandler):
     """Pipes logging events to the console output"""
 
     def __init__(self, window):
         logging.StreamHandler.__init__(self)
         self.window = window
+        self.empty = True
 
     def emit(self, record):
         level = record.levelname
         line = f'[{record.asctime}] {level}: {record.message}'
-        if self.window[CONSOLE_OUTPUT].get().strip():
+        if self.empty:
+            self.empty = False
+        else:
             line = '\n' + line
+        if record.exc_info is not None:
+            line += f" [See {LATEST_LOG_SYMLINK} for details.]"
         sg.cprint(line, text_color=LOG_COLOURS[level], end='')
 
 
@@ -536,22 +542,27 @@ class PyHSI:
 
         # Set up logging
         sg.cprint_set_output_destination(self.window, CONSOLE_OUTPUT)
+        os.makedirs(LOG_FILE_PATH, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d--%H-%M-%S")
+        self.log_file = os.path.join(LOG_FILE_PATH, f"{timestamp}.log")
+        if os.path.exists(LATEST_LOG_SYMLINK):
+            os.remove(LATEST_LOG_SYMLINK)
+        os.symlink(self.log_file, LATEST_LOG_SYMLINK)
         logging.basicConfig(
             level=logging.DEBUG if debug else logging.INFO,
             format="[%(asctime)s] %(levelname)-8s (%(pathname)s:%(lineno)d) : %(message)s",
-            filename=LOG_FILE_PATH,
+            filename=self.log_file,
             datefmt="%H:%M:%S",
             filemode='w'
         )
-        handler = LoggingHandler(self.window)
+        handler = ConsoleLoggingHandler(self.window)
         logging.getLogger('').addHandler(handler)
         logging.captureWarnings(True)
         logging.info(f"Starting PyHSI v{__version__}")
-        logging.debug(f"Running in debug mode - full log at {LOG_FILE_PATH}")
-        logging.debug(f"Window size: {self.window.size}")
+        logging.debug(f"Running in debug mode - full log at {self.log_file}")
+        logging.debug(f"Window size: {self.window.size}, hidpi: {self.hidpi}")
 
         # Load default configuration
-        logging.debug(config)
         if config is None:
             if os.path.isfile(DEFAULT_CONFIG_PATH):
                 self.load_config(config_file=DEFAULT_CONFIG_PATH)
@@ -1252,7 +1263,8 @@ class PyHSI:
             if file_name is None:
                 logging.debug("Capturing image without save location")
             else:
-                logging.debug(f"Capturing image with file_name='{file_name}' and description='{description}'")
+                d = description.replace("\n", "\\n")
+                logging.debug(f"Capturing image with file_name='{file_name}' and description='{d}'")
             [img, md] = self.camera.capture_save(
                 self.stage, vals['ranges'], vals['velocity'],
                 flip=vals['flip'], verbose=True, description=description,
