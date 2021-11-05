@@ -458,6 +458,7 @@ class PyHSI:
         self.xy_expand_elements = []
         self.x_expand_elements = []
         self.live_preview_active = False
+        self.showing_captured_preview = False
         self.live_preview_rotation = 1
         self.waterfall_frame = None
         self.live_preview_frame = None
@@ -834,7 +835,7 @@ class PyHSI:
         self.window[AUTO_CALIBRATE_PANE].update(visible=values[AUTO_CALIBRATE_CB])
         self.window[AUTO_CALIBRATE_WHITE_REF_FILE].update(disabled=values[DETECT_WHITE_TILE_CB])
         self.window[AUTO_CALIBRATE_WHITE_REF_FILE_BTN].update(disabled=values[DETECT_WHITE_TILE_CB])
-        if not self.live_preview_active:
+        if not self.live_preview_active and not self.showing_captured_preview:
             self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
         if values[STAGE_TYPE_SEL] == STAGE_TYPE_MOCK:
             self.window[STAGE_PORT_PANE].update(visible=False)
@@ -1049,6 +1050,7 @@ class PyHSI:
         self.window[PREVIEW_CANVAS].update(data=None)
         self.waterfall_frame = None
         self.live_preview_frame = None
+        self.showing_captured_preview = False
         self.window[PREVIEW_CLEAR_BTN].update(disabled=True)
         self.window[PREVIEW_ROTLEFT_BTN].update(disabled=True)
         self.window[PREVIEW_ROTRIGHT_BTN].update(disabled=True)
@@ -1104,6 +1106,7 @@ class PyHSI:
         if not waterfall and self.camera.wl:
             frame = add_wavelength_labels(frame, self.camera.wl, rot=self.live_preview_rotation)
         frame = cv2.imencode('.png', frame)[1].tobytes()
+        self.showing_captured_preview = False
         self.window[PREVIEW_CANVAS].update(data=frame)
 
     def show_captured_preview(self, preview, white_frames=None):
@@ -1125,6 +1128,7 @@ class PyHSI:
             overlay = cv2.rectangle(overlay, (0, i1), (max_x, i2), c, -1)
             preview = cv2.addWeighted(overlay, 0.25, preview, 0.75, 0)
         preview = cv2.imencode('.png', preview)[1].tobytes()
+        self.showing_captured_preview = True
         self.window[PREVIEW_CANVAS].update(data=preview)
 
     def capture_image(self, values):
