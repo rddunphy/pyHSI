@@ -17,7 +17,6 @@
     "PreviewBlueBand": 307.0,
     "PreviewHighlight": true,
     "PreviewInterpolation": false,
-    "OutputFormat": "ENVI",
     "SaveFileName": "{date}_{n:03}",
     "ImageDescription": "Camera: {model}\nRange: {start:.1f}-{stop:.1f} mm\nVelocity: {vel:.2f} mm/s\nExposure time: {exp:.2f} ms\nBinning: {bin} px\nGain: {raw_gain} ({gain:.2f} dB)\nPyHSI v{version}",
     "AutoCalibrateCheckbox": false,

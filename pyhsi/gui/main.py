@@ -95,8 +95,6 @@ PREVIEW_SINGLE_BAND_PANE = "PreviewSingleBandPane"
 PREVIEW_RGB_BAND_PANE = "PreviewRgbBandPane"
 
 # Capture and save control panel
-OUTPUT_FORMAT_SEL = "OutputFormat"
-FORMAT_ENVI = "ENVI"
 OUTPUT_FOLDER = "OutputFolder"
 OUTPUT_FOLDER_BROWSE = "OutputFolderBrowseButton"
 SAVE_FILE = "SaveFileName"
@@ -160,9 +158,9 @@ CONFIG_KEYS = (
     VELOCITY_INPUT, PREVIEW_WATERFALL_CB, PREVIEW_PSEUDOCOLOUR_CB,
     PREVIEW_SINGLE_BAND_SLIDER, PREVIEW_RED_BAND_SLIDER,
     PREVIEW_GREEN_BAND_SLIDER, PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB,
-    PREVIEW_INTERP_CB, OUTPUT_FORMAT_SEL, OUTPUT_FOLDER, SAVE_FILE,
-    IMAGE_DESCRIPTION_INPUT, SAVE_PREVIEW_CB, AUTO_CALIBRATE_CB,
-    AUTO_CALIBRATE_WHITE_REF_FILE, AUTO_CALIBRATE_DARK_REF_FILE, APP_VERSION
+    PREVIEW_INTERP_CB, OUTPUT_FOLDER, SAVE_FILE, IMAGE_DESCRIPTION_INPUT,
+    SAVE_PREVIEW_CB, AUTO_CALIBRATE_CB, AUTO_CALIBRATE_WHITE_REF_FILE,
+    AUTO_CALIBRATE_DARK_REF_FILE, APP_VERSION
 )
 
 # Config file versions that are compatible with this version of PyHSI
@@ -514,6 +512,7 @@ class PyHSI:
         )
         self.window[IMAGE_DESCRIPTION_INPUT].Widget.configure(undo=True)
         self.window.TKroot.option_add('*foreground', 'black')
+        self.window.TKroot.option_add('*background', 'white')
 
         for e in self.xy_expand_elements:
             e.expand(expand_x=True, expand_y=True)
@@ -1705,37 +1704,29 @@ class PyHSI:
         # Output format controls
         #######################################################################
 
-        formats = [FORMAT_ENVI]
         description_multiline = sg.Multiline(
             size=(30, 3),
             key=IMAGE_DESCRIPTION_INPUT
         )
+        folder_input = sg.Input(
+            self.default_folder,
+            size=(20, 1),
+            key=OUTPUT_FOLDER,
+            enable_events=True
+        )
+        filename_input = sg.Combo(
+            DEFAULT_FILE_NAMES,
+            default_value=DEFAULT_FILE_NAMES[0],
+            key=SAVE_FILE
+        )
         output_frame = sg.Frame("Capture and save", [
-            [
-                sg.Text(
-                    "Format",
-                    size=label_size,
-                    pad=label_pad
-                ),
-                sg.Combo(
-                    formats,
-                    default_value=formats[0],
-                    key=OUTPUT_FORMAT_SEL,
-                    readonly=True
-                )
-            ],
             [
                 sg.Text(
                     "Folder",
                     size=label_size,
                     pad=label_pad
                 ),
-                sg.Input(
-                    self.default_folder,
-                    size=(20, 1),
-                    key=OUTPUT_FOLDER,
-                    enable_events=True
-                ),
+                folder_input,
                 get_icon_button(
                     "open",
                     button_type=sg.BUTTON_TYPE_BROWSE_FOLDER,
@@ -1752,11 +1743,7 @@ class PyHSI:
                     size=label_size,
                     pad=label_pad
                 ),
-                sg.Combo(
-                    DEFAULT_FILE_NAMES,
-                    default_value=DEFAULT_FILE_NAMES[0],
-                    key=SAVE_FILE
-                ),
+                filename_input,
                 sg.Text(".hdr")
             ],
             [
@@ -1873,7 +1860,7 @@ class PyHSI:
         # Elements that need to be expanded to fill horizontal space:
         self.x_expand_elements.extend(
             (camera_frame, stage_frame, output_frame, preview_frame,
-             description_multiline)
+             description_multiline, folder_input, filename_input)
         )
         return [[camera_frame], [stage_frame], [preview_frame], [output_frame]]
 
