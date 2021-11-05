@@ -510,8 +510,7 @@ class PyHSI:
             enable_close_attempted_event=True,
             resizable=True,
             size=(99999, 99999),
-            finalize=True,
-            ttk_theme='clam'
+            finalize=True
         )
         self.window[IMAGE_DESCRIPTION_INPUT].Widget.configure(undo=True)
         self.window.TKroot.option_add('*foreground', 'black')
