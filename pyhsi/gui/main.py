@@ -1278,18 +1278,27 @@ class PyHSI:
                 flip=vals['flip'], verbose=True, description=description,
                 progress_callback=self.capture_image_progress_callback)
             if values[SAVE_AS_REFERENCE_CB]:
-                img = np.mean(img, axis=0, keepdims=1)
+                nframes = img.shape[0]
+                img = np.mean(img, axis=0, keepdims=True)
+                md['description'] += f"\nMean of {nframes} frames"
+                md['description'] = md['description'].strip()
             if values[AUTO_CALIBRATE_CB] and not values[SAVE_AS_REFERENCE_CB]:
                 logging.info("Calibrating image...")
                 try:
                     if values[DETECT_WHITE_TILE_CB]:
                         white_frames = find_white_frames(img)
                         W = img[white_frames[0]:white_frames[1], :, :]
+                        md['description'] += f"\nWhite reference frames: {white_frames[0]} to {white_frames[1]}"
                     else:
-                        white_ref = envi.open(values[AUTO_CALIBRATE_WHITE_REF_FILE])
+                        white_ref_file = values[AUTO_CALIBRATE_WHITE_REF_FILE]
+                        white_ref = envi.open(white_ref_file)
                         W = white_ref.asarray()
-                    dark_ref = envi.open(values[AUTO_CALIBRATE_DARK_REF_FILE])
+                        md['description'] += f"\nWhite reference file: {white_ref_file}"
+                    dark_ref_file = values[AUTO_CALIBRATE_DARK_REF_FILE]
+                    dark_ref = envi.open(dark_ref_file)
                     D = dark_ref.asarray()
+                    md['description'] += f"\nDark reference file: {dark_ref_file}"
+                    md['description'] = md['description'].strip()
                 except SpyFileNotFoundError as e:
                     logging.exception(e)
                     return
@@ -1297,7 +1306,7 @@ class PyHSI:
             captured = True
             preview = img[:, :, get_rgb_bands(md['wavelength'])[::-1]].astype(float)
             preview /= self.camera.ref_scale_factor
-            if values[AUTO_CALIBRATE_CB] and values[DETECT_WHITE_TILE_CB]:
+            if values[AUTO_CALIBRATE_CB] and values[DETECT_WHITE_TILE_CB] and not values[SAVE_AS_REFERENCE_CB]:
                 self.show_captured_preview(preview, white_frames=white_frames)
             else:
                 self.show_captured_preview(preview)
