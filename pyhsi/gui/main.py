@@ -106,6 +106,7 @@ AUTO_CALIBRATE_WHITE_REF_FILE = "AutoCalibrateWhiteRefFile"
 AUTO_CALIBRATE_WHITE_REF_FILE_BTN = "AutoCalibrateWhiteRefFileBrowseButton"
 AUTO_CALIBRATE_DARK_REF_FILE = "AutoCalibrateDarkRefFile"
 SAVE_PREVIEW_CB = "SavePreview"
+SAVE_AS_REFERENCE_CB = "SaveAsReferenceFrame"
 CAPTURE_IMAGE_BTN = "CaptureImage"
 # STOP_CAPTURE_BTN = "StopImageCapture"
 RESET_STAGE_BTN = "ResetStageButton"
@@ -161,8 +162,9 @@ CONFIG_KEYS = (
     PREVIEW_SINGLE_BAND_SLIDER, PREVIEW_RED_BAND_SLIDER,
     PREVIEW_GREEN_BAND_SLIDER, PREVIEW_BLUE_BAND_SLIDER, PREVIEW_HIGHLIGHT_CB,
     PREVIEW_INTERP_CB, OUTPUT_FOLDER, SAVE_FILE, IMAGE_DESCRIPTION_INPUT,
-    SAVE_PREVIEW_CB, AUTO_CALIBRATE_CB, AUTO_CALIBRATE_WHITE_REF_FILE,
-    AUTO_CALIBRATE_DARK_REF_FILE, DETECT_WHITE_TILE_CB, APP_VERSION
+    SAVE_PREVIEW_CB, SAVE_AS_REFERENCE_CB, AUTO_CALIBRATE_CB,
+    AUTO_CALIBRATE_WHITE_REF_FILE, AUTO_CALIBRATE_DARK_REF_FILE,
+    DETECT_WHITE_TILE_CB, APP_VERSION
 )
 
 # Config file versions that are compatible with this version of PyHSI
@@ -634,7 +636,8 @@ class PyHSI:
             self.validate(event)
         elif event in (PREVIEW_WATERFALL_CB, PREVIEW_PSEUDOCOLOUR_CB,
                        CAMERA_TYPE_SEL, STAGE_TYPE_SEL, GAIN_INPUT,
-                       AUTO_CALIBRATE_CB, DETECT_WHITE_TILE_CB):
+                       AUTO_CALIBRATE_CB, DETECT_WHITE_TILE_CB,
+                       SAVE_AS_REFERENCE_CB):
             self.update_view(values)
         elif event == BINNING_SEL:
             self.camera.set_binning(int(values[BINNING_SEL]))
@@ -835,6 +838,7 @@ class PyHSI:
         self.window[AUTO_CALIBRATE_PANE].update(visible=values[AUTO_CALIBRATE_CB])
         self.window[AUTO_CALIBRATE_WHITE_REF_FILE].update(disabled=values[DETECT_WHITE_TILE_CB])
         self.window[AUTO_CALIBRATE_WHITE_REF_FILE_BTN].update(disabled=values[DETECT_WHITE_TILE_CB])
+        self.window[AUTO_CALIBRATE_CB].update(disabled=values[SAVE_AS_REFERENCE_CB])
         if not self.live_preview_active and not self.showing_captured_preview:
             self.update_live_preview(values[PREVIEW_WATERFALL_CB], values[PREVIEW_INTERP_CB])
         if values[STAGE_TYPE_SEL] == STAGE_TYPE_MOCK:
@@ -1273,7 +1277,9 @@ class PyHSI:
                 self.stage, vals['ranges'], vals['velocity'],
                 flip=vals['flip'], verbose=True, description=description,
                 progress_callback=self.capture_image_progress_callback)
-            if values[AUTO_CALIBRATE_CB]:
+            if values[SAVE_AS_REFERENCE_CB]:
+                img = np.mean(img, axis=0, keepdims=1)
+            if values[AUTO_CALIBRATE_CB] and not values[SAVE_AS_REFERENCE_CB]:
                 logging.info("Calibrating image...")
                 try:
                     if values[DETECT_WHITE_TILE_CB]:
@@ -1861,6 +1867,13 @@ class PyHSI:
                 sg.Checkbox(
                     "Save preview as .png",
                     key=SAVE_PREVIEW_CB
+                )
+            ],
+            [
+                sg.Checkbox(
+                    "Save as single reference frame",
+                    key=SAVE_AS_REFERENCE_CB,
+                    enable_events=True
                 )
             ],
             [
