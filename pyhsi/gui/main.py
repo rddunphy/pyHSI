@@ -510,9 +510,11 @@ class PyHSI:
             enable_close_attempted_event=True,
             resizable=True,
             size=(99999, 99999),
-            finalize=True
+            finalize=True,
+            ttk_theme='clam'
         )
         self.window[IMAGE_DESCRIPTION_INPUT].Widget.configure(undo=True)
+        self.window.TKroot.option_add('*foreground', 'black')
 
         for e in self.xy_expand_elements:
             e.expand(expand_x=True, expand_y=True)
@@ -1741,6 +1743,7 @@ class PyHSI:
                     initial_folder=self.default_folder,
                     tooltip="Browse...",
                     key=OUTPUT_FOLDER_BROWSE,
+                    target=OUTPUT_FOLDER,
                     hidpi=self.hidpi
                 )
             ],
