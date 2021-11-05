@@ -178,6 +178,13 @@ LOG_COLOURS = {
 }
 LOG_FILE_PATH = os.path.join(ROOT_DIR, "pyhsi.log")
 
+DEFAULT_FILE_NAMES = [
+    "{date}_{n:03}",
+    "{date}_dark_ref",
+    "{date}_white_ref_{n:03}",
+    ""
+]
+
 # Allow ENVI header files with uppercase parameters
 spectral.settings.envi_support_nonlowercase_params = True
 
@@ -1698,7 +1705,6 @@ class PyHSI:
         #######################################################################
 
         formats = [FORMAT_ENVI]
-        file_names = ["{date}_{n}", "{date}_dark_ref", "{date}_white_ref_{n}"]
         description_multiline = sg.Multiline(
             size=(30, 3),
             key=IMAGE_DESCRIPTION_INPUT
@@ -1745,8 +1751,8 @@ class PyHSI:
                     pad=label_pad
                 ),
                 sg.Combo(
-                    file_names,
-                    default_value=file_names[0],
+                    DEFAULT_FILE_NAMES,
+                    default_value=DEFAULT_FILE_NAMES[0],
                     key=SAVE_FILE
                 ),
                 sg.Text(".hdr")
