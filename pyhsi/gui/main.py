@@ -835,7 +835,7 @@ class PyHSI:
         rgb_vis = not pc_disabled and values[PREVIEW_PSEUDOCOLOUR_CB]
         self.window[PREVIEW_RGB_BAND_PANE].update(visible=rgb_vis)
         self.window[PREVIEW_SINGLE_BAND_PANE].update(visible=single_vis)
-        self.window[AUTO_CALIBRATE_PANE].update(visible=values[AUTO_CALIBRATE_CB])
+        self.window[AUTO_CALIBRATE_PANE].update(visible=values[AUTO_CALIBRATE_CB] and not values[SAVE_AS_REFERENCE_CB])
         self.window[AUTO_CALIBRATE_WHITE_REF_FILE].update(disabled=values[DETECT_WHITE_TILE_CB])
         self.window[AUTO_CALIBRATE_WHITE_REF_FILE_BTN].update(disabled=values[DETECT_WHITE_TILE_CB])
         self.window[AUTO_CALIBRATE_CB].update(disabled=values[SAVE_AS_REFERENCE_CB])
