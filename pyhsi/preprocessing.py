@@ -24,8 +24,8 @@ def find_white_frames(S, threshold=0.9):
 
 def one_point_calibration(S, W, B, scale_factor=None):
     dtype = S.dtype
-    W = np.median(W, axis=0)
-    B = np.median(B, axis=0)
+    W = np.mean(W, axis=0)
+    B = np.mean(B, axis=0)
     with np.errstate(invalid='ignore', divide='ignore'):
         W = W - B
         S = S - B
